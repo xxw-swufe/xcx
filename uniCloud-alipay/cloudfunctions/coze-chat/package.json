@@ -1,0 +1,7 @@
+{
+  "name": "coze-chat",
+  "version": "1.0.0",
+  "description": "Reserved Coze chat cloud function",
+  "main": "index.js",
+  "dependencies": {}
+}

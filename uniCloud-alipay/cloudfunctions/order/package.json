@@ -1,0 +1,7 @@
+{
+  "name": "order",
+  "version": "1.0.0",
+  "description": "Order cloud function with mock payment",
+  "main": "index.js",
+  "dependencies": {}
+}

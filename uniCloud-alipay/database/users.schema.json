@@ -1,0 +1,86 @@
+{
+  "bsonType": "object",
+  "required": ["openid", "created_at", "updated_at"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "User ID"
+    },
+    "openid": {
+      "bsonType": "string",
+      "description": "WeChat openid or uni-id external openid"
+    },
+    "unionid": {
+      "bsonType": "string",
+      "description": "WeChat unionid"
+    },
+    "phone": {
+      "bsonType": "string",
+      "description": "Mobile phone"
+    },
+    "nickname": {
+      "bsonType": "string",
+      "description": "Nickname"
+    },
+    "avatar": {
+      "bsonType": "string",
+      "description": "Avatar URL"
+    },
+    "user_no": {
+      "bsonType": "string",
+      "description": "Business user number"
+    },
+    "member_level": {
+      "bsonType": "string",
+      "enum": ["free", "monthly", "quarterly", "yearly", "lifetime"],
+      "defaultValue": "free"
+    },
+    "member_expire_at": {
+      "bsonType": "timestamp",
+      "description": "Membership expiration time"
+    },
+    "status": {
+      "bsonType": "string",
+      "enum": ["active", "disabled"],
+      "defaultValue": "active"
+    },
+    "created_at": {
+      "bsonType": "timestamp",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updated_at": {
+      "bsonType": "timestamp",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  },
+  "index": [
+    {
+      "IndexName": "idx_openid",
+      "MgoKeySchema": {
+        "openid": 1
+      },
+      "MgoIndexOptions": {
+        "unique": true
+      }
+    },
+    {
+      "IndexName": "idx_user_no",
+      "MgoKeySchema": {
+        "user_no": 1
+      },
+      "MgoIndexOptions": {
+        "unique": true,
+        "sparse": true
+      }
+    }
+  ]
+}

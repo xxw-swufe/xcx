@@ -1,0 +1,79 @@
+{
+  "bsonType": "object",
+  "required": ["user_id", "order_no", "order_type", "amount", "status", "created_at", "updated_at"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "Order ID"
+    },
+    "user_id": {
+      "bsonType": "string",
+      "description": "users._id"
+    },
+    "order_no": {
+      "bsonType": "string"
+    },
+    "order_type": {
+      "bsonType": "string",
+      "enum": ["member", "document", "ai"]
+    },
+    "title": {
+      "bsonType": "string"
+    },
+    "amount": {
+      "bsonType": "int",
+      "description": "Amount in cents"
+    },
+    "pay_channel": {
+      "bsonType": "string",
+      "enum": ["mock", "wechat"],
+      "defaultValue": "mock"
+    },
+    "status": {
+      "bsonType": "string",
+      "enum": ["pending", "paid", "cancelled", "refunded", "closed"],
+      "defaultValue": "pending"
+    },
+    "paid_at": {
+      "bsonType": "timestamp"
+    },
+    "extra": {
+      "bsonType": "object"
+    },
+    "created_at": {
+      "bsonType": "timestamp",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updated_at": {
+      "bsonType": "timestamp",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  },
+  "index": [
+    {
+      "IndexName": "idx_order_no",
+      "MgoKeySchema": {
+        "order_no": 1
+      },
+      "MgoIndexOptions": {
+        "unique": true
+      }
+    },
+    {
+      "IndexName": "idx_user_created",
+      "MgoKeySchema": {
+        "user_id": 1,
+        "created_at": -1
+      }
+    }
+  ]
+}

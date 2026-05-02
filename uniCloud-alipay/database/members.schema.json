@@ -1,0 +1,64 @@
+{
+  "bsonType": "object",
+  "required": ["user_id", "level", "status", "created_at", "updated_at"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "Member record ID"
+    },
+    "user_id": {
+      "bsonType": "string",
+      "description": "users._id"
+    },
+    "level": {
+      "bsonType": "string",
+      "enum": ["free", "monthly", "quarterly", "yearly", "lifetime"],
+      "defaultValue": "free"
+    },
+    "status": {
+      "bsonType": "string",
+      "enum": ["active", "expired", "cancelled"],
+      "defaultValue": "active"
+    },
+    "start_at": {
+      "bsonType": "timestamp"
+    },
+    "expire_at": {
+      "bsonType": "timestamp"
+    },
+    "source_order_id": {
+      "bsonType": "string",
+      "description": "orders._id"
+    },
+    "benefits": {
+      "bsonType": "object",
+      "description": "Member benefit snapshot"
+    },
+    "created_at": {
+      "bsonType": "timestamp",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updated_at": {
+      "bsonType": "timestamp",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  },
+  "index": [
+    {
+      "IndexName": "idx_user_status",
+      "MgoKeySchema": {
+        "user_id": 1,
+        "status": 1
+      }
+    }
+  ]
+}

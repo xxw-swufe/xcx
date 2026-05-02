@@ -1,0 +1,67 @@
+{
+  "pages": [
+    { "path": "pages/login/login", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/profile-edit/profile-edit", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/consult/consult", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/consult/upload", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/document/document", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/document/letter/letter", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/document/construction/construction", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/document/design/design", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/document/safety-report/safety-report", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/document/safety-edu/safety-edu", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/document/pipeline-measure/pipeline-measure", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/document/pipeline-calc/pipeline-calc", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/document/completion/completion", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/apply/apply", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/apply/department-search", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/apply/policy-search", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/profile/profile", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/profile/settings/settings", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/profile/orders/orders", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/profile/feedback/feedback", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/profile/help/help", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/profile/membership/membership", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/home/home", "style": { "navigationBarTitleText": "Home" } },
+    { "path": "pages/index/index", "style": { "navigationBarTitleText": "uni-app" } },
+    { "path": "uni_modules/uni-id-pages/pages/userinfo/deactivate/deactivate", "style": { "navigationBarTitleText": "Deactivate" } },
+    { "path": "uni_modules/uni-id-pages/pages/userinfo/userinfo", "style": { "navigationBarTitleText": "Profile" } },
+    { "path": "uni_modules/uni-id-pages/pages/userinfo/bind-mobile/bind-mobile", "style": { "navigationBarTitleText": "Bind Mobile" } },
+    { "path": "uni_modules/uni-id-pages/pages/userinfo/cropImage/cropImage", "style": { "navigationBarTitleText": "" } },
+    { "path": "uni_modules/uni-id-pages/pages/login/login-withoutpwd", "style": { "navigationBarTitleText": "" } },
+    { "path": "uni_modules/uni-id-pages/pages/login/login-withpwd", "style": { "navigationBarTitleText": "" } },
+    { "path": "uni_modules/uni-id-pages/pages/login/login-smscode", "style": { "navigationBarTitleText": "SMS Login" } },
+    { "path": "uni_modules/uni-id-pages/pages/register/register", "style": { "navigationBarTitleText": "Register" } },
+    { "path": "uni_modules/uni-id-pages/pages/register/register-admin", "style": { "navigationBarTitleText": "Admin Register", "enablePullDownRefresh": false } },
+    { "path": "uni_modules/uni-id-pages/pages/register/register-by-email", "style": { "navigationBarTitleText": "Email Register" } },
+    { "path": "uni_modules/uni-id-pages/pages/retrieve/retrieve", "style": { "navigationBarTitleText": "Reset Password" } },
+    { "path": "uni_modules/uni-id-pages/pages/retrieve/retrieve-by-email", "style": { "navigationBarTitleText": "Reset By Email" } },
+    { "path": "uni_modules/uni-id-pages/pages/common/webview/webview", "style": { "navigationBarTitleText": "", "enablePullDownRefresh": false } },
+    { "path": "uni_modules/uni-id-pages/pages/userinfo/change_pwd/change_pwd", "style": { "navigationBarTitleText": "Change Password", "enablePullDownRefresh": false } },
+    { "path": "uni_modules/uni-id-pages/pages/userinfo/set-pwd/set-pwd", "style": { "navigationBarTitleText": "Set Password", "enablePullDownRefresh": false } },
+    { "path": "uni_modules/uni-id-pages/pages/userinfo/realname-verify/realname-verify", "style": { "navigationBarTitleText": "Real Name", "enablePullDownRefresh": false } }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "App",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F0F4FA"
+  },
+  "tabBar": {
+    "color": "#9ca3af",
+    "selectedColor": "#1e3a8a",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/consult/consult", "text": "咨询", "iconPath": "static/tabbar/consult.png", "selectedIconPath": "static/tabbar/consult_active.png" },
+      { "pagePath": "pages/document/document", "text": "文书", "iconPath": "static/tabbar/document.png", "selectedIconPath": "static/tabbar/document_active.png" },
+      { "pagePath": "pages/apply/apply", "text": "申报", "iconPath": "static/tabbar/apply.png", "selectedIconPath": "static/tabbar/apply_active.png" },
+      { "pagePath": "pages/profile/profile", "text": "我的", "iconPath": "static/tabbar/profile.png", "selectedIconPath": "static/tabbar/profile_active.png" }
+    ]
+  },
+  "uniIdRouter": {
+    "loginPage": "pages/login/login",
+    "needLogin": [],
+    "resToLogin": false
+  }
+}

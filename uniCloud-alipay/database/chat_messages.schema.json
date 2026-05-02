@@ -1,0 +1,65 @@
+{
+  "bsonType": "object",
+  "required": ["session_id", "user_id", "role", "content", "created_at"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "Message ID"
+    },
+    "session_id": {
+      "bsonType": "string",
+      "description": "chat_sessions._id"
+    },
+    "user_id": {
+      "bsonType": "string",
+      "description": "users._id"
+    },
+    "role": {
+      "bsonType": "string",
+      "enum": ["user", "assistant", "system"]
+    },
+    "content": {
+      "bsonType": "string"
+    },
+    "content_type": {
+      "bsonType": "string",
+      "enum": ["text", "image", "file"],
+      "defaultValue": "text"
+    },
+    "tokens": {
+      "bsonType": "int",
+      "defaultValue": 0
+    },
+    "raw_response": {
+      "bsonType": "object",
+      "description": "Reserved AI provider response"
+    },
+    "created_at": {
+      "bsonType": "timestamp",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  },
+  "index": [
+    {
+      "IndexName": "idx_session_created",
+      "MgoKeySchema": {
+        "session_id": 1,
+        "created_at": 1
+      }
+    },
+    {
+      "IndexName": "idx_user_created",
+      "MgoKeySchema": {
+        "user_id": 1,
+        "created_at": -1
+      }
+    }
+  ]
+}

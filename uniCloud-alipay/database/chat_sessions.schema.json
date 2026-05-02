@@ -1,0 +1,65 @@
+{
+  "bsonType": "object",
+  "required": ["user_id", "title", "scene", "status", "created_at", "updated_at"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "Session ID"
+    },
+    "user_id": {
+      "bsonType": "string",
+      "description": "users._id"
+    },
+    "title": {
+      "bsonType": "string",
+      "defaultValue": "New chat"
+    },
+    "scene": {
+      "bsonType": "string",
+      "enum": ["general", "document", "policy", "department"],
+      "defaultValue": "general"
+    },
+    "coze_conversation_id": {
+      "bsonType": "string",
+      "description": "Reserved Coze conversation ID"
+    },
+    "last_message": {
+      "bsonType": "string"
+    },
+    "message_count": {
+      "bsonType": "int",
+      "defaultValue": 0
+    },
+    "status": {
+      "bsonType": "string",
+      "enum": ["active", "archived", "deleted"],
+      "defaultValue": "active"
+    },
+    "created_at": {
+      "bsonType": "timestamp",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    },
+    "updated_at": {
+      "bsonType": "timestamp",
+      "forceDefaultValue": {
+        "$env": "now"
+      }
+    }
+  },
+  "index": [
+    {
+      "IndexName": "idx_user_updated",
+      "MgoKeySchema": {
+        "user_id": 1,
+        "updated_at": -1
+      }
+    }
+  ]
+}
