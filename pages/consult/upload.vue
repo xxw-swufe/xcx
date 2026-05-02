@@ -82,22 +82,7 @@
 export default {
   data() {
     return {
-      uploadedFiles: [
-        {
-          name: '合同材料_01.jpg',
-          size: '2.4 MB',
-          isImage: true,
-          thumb: '/static/logo.png',
-          progress: 100
-        },
-        {
-          name: '预算说明.pdf',
-          size: '1.8 MB',
-          isImage: false,
-          thumb: '',
-          progress: 75
-        }
-      ]
+      uploadedFiles: []
     }
   },
   methods: {

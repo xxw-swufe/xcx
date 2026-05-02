@@ -1,13 +1,17 @@
 <template>
   <view class="page">
     <view class="nav">
-      <view class="back" @click="goBack"><uni-icons type="left" size="18" color="#374151"></uni-icons></view>
-      <text class="title">Membership</text>
-      <view class="avatar"><uni-icons type="person" size="16" color="#FFFFFF"></uni-icons></view>
+      <view class="back" @click="goBack">
+        <uni-icons type="left" size="18" color="#374151"></uni-icons>
+      </view>
+      <text class="title">会员订阅</text>
+      <view class="avatar">
+        <uni-icons type="person" size="16" color="#FFFFFF"></uni-icons>
+      </view>
     </view>
 
     <scroll-view class="content" scroll-y>
-      <text class="headline">Open membership to unlock all document tools</text>
+      <text class="headline">开通会员，解锁全部文书功能</text>
 
       <view class="plan-list">
         <view
@@ -17,7 +21,7 @@
           :class="{ selected: selectedPlan === idx }"
           @click="selectedPlan = idx"
         >
-          <view v-if="plan.recommend" class="tag">RECOMMENDED</view>
+          <view v-if="plan.recommend" class="tag">推荐</view>
           <view class="row">
             <view class="radio" :class="{ checked: selectedPlan === idx }">
               <view v-if="selectedPlan === idx" class="dot"></view>
@@ -28,7 +32,9 @@
             </view>
           </view>
           <text class="sub">{{ plan.sub }}</text>
-          <view v-if="plan.bonus" class="bonus"><text class="bonus-text">{{ plan.bonus }}</text></view>
+          <view v-if="plan.bonus" class="bonus">
+            <text class="bonus-text">{{ plan.bonus }}</text>
+          </view>
           <view v-if="plan.gift" class="gift">
             <text class="gift-emoji">{{ plan.giftEmoji }}</text>
             <view>
@@ -40,7 +46,7 @@
       </view>
 
       <view class="feature-card">
-        <text class="feature-title">Benefits</text>
+        <text class="feature-title">开通权益</text>
         <view class="feature-list">
           <view v-for="item in features" :key="item" class="feature-item">
             <view class="feature-dot"></view>
@@ -49,7 +55,9 @@
         </view>
       </view>
 
-      <view class="pay-btn" @click="handlePay"><text class="pay-text">Open Now</text></view>
+      <view class="pay-btn" @click="handlePay">
+        <text class="pay-text">立即开通</text>
+      </view>
     </scroll-view>
   </view>
 </template>
@@ -62,14 +70,14 @@ export default {
     return {
       selectedPlan: 0,
       plans: [
-        { id: 'monthly', name: 'Monthly', priceText: '￥29.00 / mo', sub: 'Auto renew, cancel anytime', recommend: true },
-        { id: 'quarterly', name: 'Quarterly', priceText: '￥78.00 / qtr', sub: 'Good for short term use', bonus: '5 extra export credits' },
-        { id: 'yearly', name: 'Yearly', priceText: '￥198.00 / yr', sub: 'Unlock all document tools all year', gift: 'Free safety helmet', giftSub: 'Original ￥89, shipping included', giftEmoji: '礼' }
+        { id: 'monthly', name: '包月会员', priceText: '¥29.00 / 月', sub: '适合短期使用，随时可取消', recommend: true },
+        { id: 'quarterly', name: '包季会员', priceText: '¥88.00 / 季', sub: '比包月更划算，适合中期使用', bonus: '额外赠送 5 次导出额度' },
+        { id: 'yearly', name: '包年会员', priceText: '¥298.00 / 年', sub: '全年解锁全部文书工具', gift: '赠送安全头盔', giftSub: '原价 ¥99，包邮到手', giftEmoji: '🎁' }
       ],
       features: [
-        'Unlock all 8 document cards',
-        'Priority access to future AI generation',
-        'Local membership cache becomes active immediately'
+        '解锁全部 8 个文书卡片',
+        '优先体验后续 AI 生成功能',
+        '本地会员缓存开通后立即生效'
       ]
     }
   },
@@ -79,7 +87,7 @@ export default {
     },
     handlePay() {
       setVipStatus(true)
-      uni.showToast({ title: 'Open success', icon: 'success' })
+      uni.showToast({ title: '开通成功', icon: 'success' })
       setTimeout(() => {
         uni.navigateBack()
       }, 800)

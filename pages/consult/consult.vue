@@ -5,7 +5,7 @@
         <image class="nav-logo" src="/static/brand-icon.png" mode="aspectFit" />
         <view class="nav-title-group">
           <text class="nav-title">智能咨询</text>
-          <text class="nav-subtitle">在线问答 · 记录同步 · 流式展示</text>
+          <text class="nav-subtitle">只有你手动选中的附件，才会在点发送后一起发出</text>
         </view>
       </view>
       <view class="nav-avatar" @click="goProfile">
@@ -28,7 +28,20 @@
             <rich-text class="rich-content" :nodes="msg.html || defaultHtml(msg.content)" />
           </view>
           <view v-if="msg.role === 'user'" class="msg-bubble bubble-user">
-            <text class="msg-text">{{ msg.content }}</text>
+            <template v-if="msg.type === 'image'">
+              <image class="chat-image" :src="msg.filePath" mode="widthFix" />
+              <text class="msg-text file-note">{{ msg.content }}</text>
+            </template>
+            <template v-else-if="msg.type === 'audio'">
+              <view class="audio-card">
+                <uni-icons type="mic" size="18" color="#1e3a8a" />
+                <view class="audio-info">
+                  <text class="msg-text">{{ msg.content }}</text>
+                  <text class="file-note">{{ msg.extra || '' }}</text>
+                </view>
+              </view>
+            </template>
+            <text v-else class="msg-text">{{ msg.content }}</text>
           </view>
           <view v-if="msg.role === 'user'" class="msg-avatar user-avatar">
             <uni-icons type="person" size="18" color="#FFFFFF" />
@@ -38,6 +51,28 @@
     </scroll-view>
 
     <view class="input-area">
+      <view v-if="pendingAttachments.length" class="pending-box">
+        <view
+          class="pending-item"
+          v-for="(item, index) in pendingAttachments"
+          :key="item.id"
+        >
+          <view class="pending-preview" v-if="item.type === 'image'">
+            <image class="pending-image" :src="item.filePath" mode="aspectFill" />
+          </view>
+          <view class="pending-preview pending-audio" v-else-if="item.type === 'audio'">
+            <uni-icons type="mic" size="18" color="#1e3a8a" />
+          </view>
+          <view class="pending-info">
+            <text class="pending-title">{{ item.title }}</text>
+            <text class="pending-subtitle">{{ item.subtitle }}</text>
+          </view>
+          <view class="pending-remove" @click="removePending(index)">
+            <uni-icons type="closeempty" size="14" color="#9ca3af" />
+          </view>
+        </view>
+      </view>
+
       <view class="quick-actions">
         <view class="quick-btn" @click="handleAction('camera')">
           <uni-icons type="camera" size="20" color="#6b7280" />
@@ -52,6 +87,7 @@
           <uni-icons type="paperclip" size="20" color="#FFFFFF" />
         </view>
       </view>
+
       <view class="input-row">
         <input
           class="chat-input"
@@ -84,20 +120,26 @@ export default {
       sessionId: '',
       userId: '',
       messages: [],
-      streamTimer: null
+      pendingAttachments: [],
+      streamTimer: null,
+      voiceStopTimer: null
     }
   },
   onShow() {
     this.ensureLoginAndLoad()
   },
   onUnload() {
-    this.clearStreamTimer()
+    this.clearTimers()
   },
   methods: {
-    clearStreamTimer() {
+    clearTimers() {
       if (this.streamTimer) {
         clearTimeout(this.streamTimer)
         this.streamTimer = null
+      }
+      if (this.voiceStopTimer) {
+        clearTimeout(this.voiceStopTimer)
+        this.voiceStopTimer = null
       }
     },
     escapeHtml(text) {
@@ -115,7 +157,7 @@ export default {
       return uni.getStorageSync('uni-id-pages-userInfo') || {}
     },
     getWelcomeMessage() {
-      const content = '你好，我是智能咨询助手。你可以直接输入问题，我会帮你整理答复。'
+      const content = '你好，我是智能咨询助手。请先输入问题，或者手动添加图片、语音附件后再发送。'
       return {
         id: 'welcome',
         role: 'assistant',
@@ -191,24 +233,40 @@ export default {
         console.error('loadHistory failed', error)
       }
     },
+    buildPendingSummary(text) {
+      const parts = []
+      if (text) parts.push(text)
+      this.pendingAttachments.forEach((item) => {
+        if (item.type === 'image') {
+          parts.push(`图片附件：${item.title}`)
+        } else if (item.type === 'audio') {
+          parts.push(`语音附件：${item.title}`)
+        }
+      })
+      return parts.join('\n')
+    },
     async sendMessage() {
       const text = this.inputText.trim()
-      if (!text || this.sending) return
+      if ((!text && !this.pendingAttachments.length) || this.sending) return
 
       if (!this.userId) {
         this.ensureLoginAndLoad()
         return
       }
 
-      this.clearStreamTimer()
+      this.clearTimers()
       this.sending = true
-      const userMsg = {
+
+      const summary = this.buildPendingSummary(text)
+      this.messages.push({
         id: `user-${Date.now()}`,
         role: 'user',
-        content: text
-      }
-      this.messages.push(userMsg)
+        content: summary,
+        type: 'text'
+      })
+
       this.inputText = ''
+      this.pendingAttachments = []
       this.scrollToBottom()
 
       const placeholder = this.createAssistantPlaceholder()
@@ -217,7 +275,7 @@ export default {
         const result = await sendAiMessage({
           userId: this.userId,
           sessionId: this.sessionId,
-          content: text,
+          content: summary,
           scene: 'general'
         })
 
@@ -286,12 +344,89 @@ export default {
       })
     },
     handleAction(type) {
-      const labels = {
-        camera: '摄像头',
-        voice: '麦克风',
-        link: '网页链接'
+      if (type === 'camera') {
+        this.pickCameraImage()
+        return
       }
-      uni.showToast({ title: `${labels[type]}入口暂时保留`, icon: 'none' })
+
+      if (type === 'voice') {
+        this.recordVoice()
+        return
+      }
+
+      if (type === 'link') {
+        this.pickClipboardLink()
+      }
+    },
+    pickCameraImage() {
+      uni.chooseImage({
+        count: 1,
+        sourceType: ['camera'],
+        sizeType: ['compressed'],
+        success: (res) => {
+          const filePath = (res.tempFilePaths && res.tempFilePaths[0]) || ''
+          const fileName = filePath ? filePath.split('/').pop() : '相机图片'
+          this.pendingAttachments.push({
+            id: `img-${Date.now()}`,
+            type: 'image',
+            title: fileName,
+            subtitle: '等待发送',
+            filePath
+          })
+          this.scrollToBottom()
+          uni.showToast({ title: '图片已加入待发送区', icon: 'none' })
+        },
+        fail: () => {
+          uni.showToast({ title: '未能打开摄像头', icon: 'none' })
+        }
+      })
+    },
+    recordVoice() {
+      const recorder = uni.getRecorderManager()
+      uni.showToast({ title: '开始录音，5秒后自动结束', icon: 'none' })
+
+      recorder.offStop && recorder.offStop()
+      recorder.onStop((res) => {
+        const filePath = (res && res.tempFilePath) || ''
+        this.pendingAttachments.push({
+          id: `audio-${Date.now()}`,
+          type: 'audio',
+          title: '语音附件',
+          subtitle: filePath ? '等待发送' : '录音已结束',
+          filePath
+        })
+        this.scrollToBottom()
+        uni.showToast({ title: '录音已加入待发送区', icon: 'none' })
+      })
+
+      recorder.start({ format: 'mp3' })
+      this.voiceStopTimer = setTimeout(() => {
+        try {
+          recorder.stop()
+        } catch (error) {
+          console.error('stop recorder failed', error)
+        }
+      }, 5000)
+    },
+    pickClipboardLink() {
+      uni.getClipboardData({
+        success: (res) => {
+          const url = String(res.data || '').trim()
+          if (!/^https?:\/\//i.test(url)) {
+            uni.showToast({ title: '请先复制一个网页链接到剪贴板', icon: 'none' })
+            return
+          }
+
+          this.inputText = this.inputText ? `${this.inputText}\n${url}` : url
+          uni.showToast({ title: '链接已填入输入框', icon: 'none' })
+        },
+        fail: () => {
+          uni.showToast({ title: '无法读取剪贴板', icon: 'none' })
+        }
+      })
+    },
+    removePending(index) {
+      this.pendingAttachments.splice(index, 1)
     },
     goUpload() {
       uni.navigateTo({ url: '/pages/consult/upload' })
@@ -433,6 +568,30 @@ export default {
   white-space: pre-wrap;
 }
 
+.file-note {
+  font-size: 22rpx;
+  color: #64748b;
+  margin-top: 8rpx;
+}
+
+.chat-image {
+  width: 280rpx;
+  border-radius: 16rpx;
+  margin-bottom: 8rpx;
+  background: #f8fafc;
+}
+
+.audio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.audio-info {
+  display: flex;
+  flex-direction: column;
+}
+
 .rich-content {
   font-size: 28rpx;
   line-height: 1.7;
@@ -443,6 +602,74 @@ export default {
   padding: 16rpx 24rpx 12rpx;
   border-top: 1rpx solid #e5e7eb;
   flex-shrink: 0;
+}
+
+.pending-box {
+  background: #f8fafc;
+  border-radius: 18rpx;
+  padding: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.pending-item {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 10rpx 8rpx;
+  border-radius: 14rpx;
+  background: #ffffff;
+  margin-bottom: 10rpx;
+}
+
+.pending-item:last-child {
+  margin-bottom: 0;
+}
+
+.pending-preview {
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 12rpx;
+  background: #e2e8f0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.pending-audio {
+  background: #dbeafe;
+}
+
+.pending-image {
+  width: 68rpx;
+  height: 68rpx;
+}
+
+.pending-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.pending-title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.pending-subtitle {
+  font-size: 22rpx;
+  color: #64748b;
+  margin-top: 4rpx;
+}
+
+.pending-remove {
+  width: 40rpx;
+  height: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .quick-actions {
