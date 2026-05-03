@@ -63,16 +63,15 @@
 </template>
 
 <script>
-import { setVipStatus } from '@/utils/vip'
-
 export default {
   data() {
     return {
       selectedPlan: 0,
+      orderLoading: false,
       plans: [
-        { id: 'monthly', name: '包月会员', priceText: '¥29.00 / 月', sub: '适合短期使用，随时可取消', recommend: true },
-        { id: 'quarterly', name: '包季会员', priceText: '¥88.00 / 季', sub: '比包月更划算，适合中期使用', bonus: '额外赠送 5 次导出额度' },
-        { id: 'yearly', name: '包年会员', priceText: '¥298.00 / 年', sub: '全年解锁全部文书工具', gift: '赠送安全头盔', giftSub: '原价 ¥99，包邮到手', giftEmoji: '🎁' }
+        { id: 'monthly', name: '包月会员', priceText: '￥29.00 / 月', sub: '适合短期使用，随时可取消', recommend: true },
+        { id: 'quarterly', name: '包季会员', priceText: '￥88.00 / 季', sub: '比包月更划算，适合中期使用', bonus: '额外赠送 5 次导出额度' },
+        { id: 'yearly', name: '包年会员', priceText: '￥298.00 / 年', sub: '全年解锁全部文书工具', gift: '赠送安全头盔', giftSub: '原价 ￥99，包邮到手', giftEmoji: '🎁' }
       ],
       features: [
         '解锁全部 8 个文书卡片',
@@ -81,16 +80,79 @@ export default {
       ]
     }
   },
+  computed: {
+    currentPlan() {
+      return this.plans[this.selectedPlan] || this.plans[0]
+    }
+  },
   methods: {
     goBack() {
       uni.navigateBack()
     },
-    handlePay() {
-      setVipStatus(true)
-      uni.showToast({ title: '开通成功', icon: 'success' })
-      setTimeout(() => {
-        uni.navigateBack()
-      }, 800)
+    async handlePay() {
+      if (this.orderLoading) return
+
+      const userInfo = uni.getStorageSync('uni-id-pages-userInfo') || {}
+      const userId = userInfo._id
+      if (!userId) {
+        uni.showToast({ title: '请先登录', icon: 'none' })
+        return
+      }
+
+      const plan = this.currentPlan
+      const days = plan.id === 'yearly' ? 365 : plan.id === 'quarterly' ? 90 : 30
+      const amount = Number(plan.priceText.replace(/[^\d.]/g, '')) || 0
+
+      this.orderLoading = true
+      uni.showLoading({ title: '正在创建订单', mask: true })
+
+      try {
+        const res = await uniCloud.callFunction({
+          name: 'order',
+          data: {
+            action: 'createOrder',
+            userId,
+            orderType: 'member',
+            title: plan.name,
+            amount,
+            extra: {
+              level: plan.id,
+              days
+            }
+          }
+        })
+
+        if (!res.result || res.result.code !== 0) {
+          uni.showToast({ title: res.result?.message || '创建订单失败', icon: 'none' })
+          return
+        }
+
+        const order = res.result.data || {}
+        const params = {
+          orderId: order.orderId,
+          orderNo: order.orderNo,
+          planId: plan.id,
+          planName: plan.name,
+          planPrice: plan.priceText,
+          amount,
+          periodText: plan.sub,
+          days,
+          payMethod: '支付密码'
+        }
+        const query = Object.keys(params)
+          .map((key) => `${key}=${encodeURIComponent(params[key])}`)
+          .join('&')
+
+        uni.navigateTo({
+          url: `/pages/profile/membership/pay-password?${query}`
+        })
+      } catch (e) {
+        console.error(e)
+        uni.showToast({ title: '创建订单失败', icon: 'none' })
+      } finally {
+        this.orderLoading = false
+        uni.hideLoading()
+      }
     }
   }
 }
