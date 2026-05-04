@@ -5,7 +5,8 @@
     "description": "提供极简教程，用最快的速度入门uni-id和uni-id-pages。用最小配置和操作就能测试运行。用户中心、小程序登录、微信手机号登录、qq登录、apple登录。 vx:xiaoluobu7",
     "main": "main.js",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "check:project": "node scripts/check-project.cjs",
+        "test": "npm run check:project"
     },
     "keywords": [
         "用户中心",

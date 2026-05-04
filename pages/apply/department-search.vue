@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <view class="page">
     <view class="nav-header">
       <view class="back-btn" @click="goBack">
