@@ -144,7 +144,7 @@ export default {
 }
 .nav-title-center { font-size: 30rpx; font-weight: 700; color: #06145f; }
 .nav-title-right { font-size: 28rpx; font-weight: 700; color: #06145f; }
-.content { flex: 1; padding: 0 32rpx; }
+.content { flex: 1; padding: 0 32rpx; box-sizing: border-box; }
 .success-area { display: flex; flex-direction: column; align-items: center; padding: 40rpx 0 50rpx; }
 .success-icon {
   width: 120rpx; height: 120rpx; border-radius: 50%;
@@ -160,12 +160,15 @@ export default {
 .success-title { font-size: 40rpx; font-weight: 800; color: #06145f; margin-bottom: 12rpx; }
 .success-sub { font-size: 26rpx; color: #334155; }
 .order-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   background: #ffffff; border-radius: 28rpx; padding: 32rpx;
   box-shadow: 0 8rpx 24rpx rgba(14, 116, 144, 0.08);
   border: 4rpx solid #dff3fb;
 }
-.order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28rpx; }
-.order-header-left { display: flex; align-items: center; }
+.order-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28rpx; width: 100%; min-width: 0; box-sizing: border-box; }
+.order-header-left { display: flex; align-items: center; min-width: 0; }
 .header-bar { width: 8rpx; height: 32rpx; background: #0f9f8c; border-radius: 4rpx; margin-right: 14rpx; }
 .order-header-title { font-size: 30rpx; font-weight: 800; color: #111827; }
 .status-tag {
@@ -173,7 +176,7 @@ export default {
   background: #dffaf2; color: #0f9f8c;
   font-size: 22rpx; font-weight: 700;
 }
-.order-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22rpx; gap: 24rpx; }
+.order-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22rpx; gap: 24rpx; width: 100%; min-width: 0; box-sizing: border-box; }
 .order-row:last-child { margin-bottom: 0; }
 .order-label { font-size: 26rpx; color: #64748b; flex-shrink: 0; }
 .order-value {
@@ -187,17 +190,23 @@ export default {
   display: flex; align-items: flex-start; gap: 10rpx;
   margin-top: 28rpx; padding: 24rpx; border-radius: 18rpx;
   background: #eef2ff; margin-bottom: 40rpx;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
-.tip-text { flex: 1; font-size: 22rpx; color: #334155; line-height: 1.6; }
+.tip-text { flex: 1; font-size: 22rpx; color: #334155; line-height: 1.6; min-width: 0; }
 .bottom-bar {
   padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
   background: #eef8fc;
+  box-sizing: border-box;
 }
 .action-btn {
   height: 92rpx; border-radius: 46rpx;
   background: linear-gradient(135deg, #13259f, #11198c);
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 12rpx 24rpx rgba(30, 58, 138, 0.25);
+  width: 100%;
+  box-sizing: border-box;
 }
 .action-text { font-size: 30rpx; color: #ffffff; font-weight: 700; }
 </style>

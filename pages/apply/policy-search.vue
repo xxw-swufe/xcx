@@ -169,8 +169,8 @@ export default {
 .back-btn { width: 62rpx; height: 62rpx; border-radius: 50%; border: 2rpx dashed #9dc0ff; display: flex; align-items: center; justify-content: center; color: #1b2f74; font-size: 30rpx; }
 .back-btn.ghost { border-color: transparent; }
 .nav-title { font-size: 32rpx; font-weight: 900; color: #18306b; }
-.content { flex: 1; padding: 8rpx 18rpx 0; }
-.location-card { background: rgba(255, 255, 255, 0.92); border-radius: 28rpx; padding: 22rpx 18rpx 18rpx; box-shadow: 0 14rpx 30rpx rgba(20, 40, 95, 0.09); }
+.content { flex: 1; padding: 8rpx 18rpx 0; box-sizing: border-box; }
+.location-card { width: 100%; min-width: 0; box-sizing: border-box; background: rgba(255, 255, 255, 0.92); border-radius: 28rpx; padding: 22rpx 18rpx 18rpx; box-shadow: 0 14rpx 30rpx rgba(20, 40, 95, 0.09); }
 .loc-row { display: flex; align-items: center; gap: 10rpx; color: #11625e; font-size: 20rpx; font-weight: 700; margin-bottom: 18rpx; }
 .loc-pin { font-size: 26rpx; }
 .search-box { height: 78rpx; border-radius: 20rpx; background: #dff0fb; display: flex; align-items: center; padding: 0 20rpx; color: #91a8c4; margin-bottom: 18rpx; }
@@ -181,7 +181,8 @@ export default {
 .section-head { display: flex; align-items: center; justify-content: space-between; margin: 24rpx 4rpx 14rpx; }
 .section-title { font-size: 30rpx; font-weight: 900; color: #102b71; }
 .section-right { font-size: 17rpx; font-weight: 800; color: #8fa0c2; }
-.policy-card { background: #ffffff; border-radius: 26rpx; padding: 20rpx 18rpx; margin-bottom: 16rpx; box-shadow: 0 12rpx 28rpx rgba(20, 40, 95, 0.08); }
+.policy-card { width: 100%; min-width: 0; box-sizing: border-box; background: #ffffff; border-radius: 26rpx; padding: 20rpx 18rpx; margin-bottom: 16rpx; box-shadow: 0 12rpx 28rpx rgba(20, 40, 95, 0.08); }
+.policy-top { width: 100%; min-width: 0; box-sizing: border-box; }
 .policy-top { display: flex; align-items: flex-start; gap: 12rpx; }
 .policy-icon { width: 64rpx; height: 64rpx; border-radius: 18rpx; display: flex; align-items: center; justify-content: center; font-size: 30rpx; flex-shrink: 0; }
 .policy-main { flex: 1; }

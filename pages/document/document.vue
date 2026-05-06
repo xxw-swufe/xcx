@@ -54,7 +54,7 @@
         >
           <view class="badge">会员专享</view>
           <view class="card-icon">
-            <uni-icons :type="item.icon" :size="34" :color="item.accent"></uni-icons>
+            <uni-icons class="card-icon-inner" :type="item.icon" :size="34" :color="item.accent"></uni-icons>
           </view>
           <text class="card-title">{{ item.title }}</text>
           <text class="card-desc">{{ item.desc }}</text>
@@ -143,23 +143,24 @@ export default {
 .logo { width: 48rpx; height: 48rpx; margin-right: 14rpx; border-radius: 10rpx; }
 .title { font-size: 32rpx; font-weight: 800; color: #12285f; }
 .avatar { width: 56rpx; height: 56rpx; border-radius: 50%; overflow: hidden; }
-.hero { padding: 6rpx 28rpx 18rpx; white-space: nowrap; }
-.hero-row { display: flex; gap: 18rpx; }
-.banner { width: 280rpx; height: 180rpx; border-radius: 28rpx; padding: 28rpx; position: relative; overflow: hidden; flex-shrink: 0; box-shadow: 0 18rpx 36rpx rgba(34, 54, 102, 0.10); opacity: 0.78; transform: scale(0.98); }
+.hero { padding: 6rpx 28rpx 18rpx 28rpx; white-space: nowrap; box-sizing: border-box; }
+.hero-row { display: flex; gap: 16rpx; padding-right: 28rpx; }
+.banner { width: 272rpx; height: 180rpx; border-radius: 28rpx; padding: 28rpx; position: relative; overflow: hidden; flex-shrink: 0; box-shadow: 0 18rpx 36rpx rgba(34, 54, 102, 0.10); opacity: 0.78; transform: scale(0.98); box-sizing: border-box; }
 .banner.active { opacity: 1; transform: scale(1); }
 .banner-title { display: block; font-size: 32rpx; font-weight: 800; color: #18306b; }
 .banner-sub { display: block; font-size: 22rpx; color: rgba(24, 48, 107, 0.68); margin-top: 10rpx; }
-.banner-icon-wrap { position: absolute; right: 18rpx; top: 16rpx; width: 112rpx; height: 112rpx; display: flex; align-items: center; justify-content: center; }
+.banner-icon-wrap { position: absolute; right: 18rpx; top: 50%; width: 112rpx; height: 112rpx; display: flex; align-items: center; justify-content: center; transform: translateY(-50%); }
 .dots { display: flex; align-items: center; justify-content: center; gap: 10rpx; margin-top: 14rpx; }
 .dot { width: 14rpx; height: 14rpx; border-radius: 50%; background: #d0d8ea; }
 .dot.active { width: 34rpx; border-radius: 999rpx; background: #163172; }
 .vip-bar { margin: 0 28rpx 18rpx; padding: 20rpx 22rpx; border-radius: 22rpx; background: rgba(255, 255, 255, 0.9); border: 1rpx solid rgba(79, 124, 255, 0.16); display: flex; align-items: center; justify-content: space-between; box-shadow: 0 12rpx 28rpx rgba(18, 40, 95, 0.05); }
 .vip-btn { padding: 12rpx 22rpx; border-radius: 999rpx; background: linear-gradient(135deg, #0f2f87 0%, #173fbe 100%); color: #ffffff; font-size: 22rpx; font-weight: 700; }
-.content { flex: 1; padding: 0 28rpx 20rpx; }
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18rpx; }
-.card { min-height: 240rpx; background: #ffffff; border-radius: 24rpx; padding: 22rpx 20rpx; position: relative; overflow: hidden; box-shadow: 0 10rpx 24rpx rgba(18, 40, 95, 0.06); border: 2rpx solid transparent; }
+.content { flex: 1; padding: 0 28rpx 20rpx; box-sizing: border-box; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20rpx; width: 100%; box-sizing: border-box; }
+.card { width: 100%; min-width: 0; min-height: 240rpx; box-sizing: border-box; background: #ffffff; border-radius: 24rpx; padding: 22rpx 20rpx; position: relative; overflow: hidden; box-shadow: 0 10rpx 24rpx rgba(18, 40, 95, 0.06); border: 2rpx solid transparent; display: flex; flex-direction: column; align-items: center; }
 .badge { position: absolute; top: 16rpx; right: 16rpx; padding: 6rpx 12rpx; border-radius: 999rpx; background: #fff2d8; color: #d27b00; font-size: 18rpx; font-weight: 700; }
-.card-icon { display: flex; width: 84rpx; height: 84rpx; border-radius: 24rpx; align-items: center; justify-content: center; background: #f6f8ff; margin: 36rpx auto 16rpx; box-shadow: 0 8rpx 16rpx rgba(18, 40, 95, 0.06); }
+.card-icon { display: flex; width: 84rpx; height: 84rpx; border-radius: 24rpx; align-items: center; justify-content: center; background: #f6f8ff; margin: 36rpx auto 16rpx; box-shadow: 0 8rpx 16rpx rgba(18, 40, 95, 0.06); line-height: 1; flex-shrink: 0; }
+.card-icon-inner { display: block; line-height: 1; }
 .card-title { display: block; font-size: 30rpx; font-weight: 800; color: #13295f; margin-top: 2rpx; text-align: center; }
 .card-desc { display: block; font-size: 20rpx; line-height: 1.45; color: #6e7d9c; margin-top: 8rpx; text-align: center; }
 </style>

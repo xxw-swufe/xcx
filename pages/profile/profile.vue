@@ -186,6 +186,7 @@ export default {
 		flex: 1;
 		overflow-y: auto;
 		padding: 24rpx;
+		box-sizing: border-box;
 	}
 
 	.user-card {
@@ -276,6 +277,8 @@ export default {
 	}
 
 	.menu-card {
+		width: 100%;
+		box-sizing: border-box;
 		background: #ffffff;
 		border-radius: 20rpx;
 		overflow: hidden;
@@ -287,6 +290,7 @@ export default {
 		align-items: center;
 		padding: 28rpx 24rpx;
 		border-bottom: 1rpx solid #f1f5f9;
+		box-sizing: border-box;
 	}
 
 	.menu-item:last-child {

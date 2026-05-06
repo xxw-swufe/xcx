@@ -155,6 +155,7 @@
 	.content {
 		flex: 1;
 		padding: 0 20rpx 0;
+		box-sizing: border-box;
 	}
 
 	.title-block {
@@ -182,9 +183,14 @@
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 14rpx;
 		margin-bottom: 16rpx;
+		width: 100%;
+		box-sizing: border-box;
 	}
 
 	.tool-card {
+		width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
 		min-height: 272rpx;
 		padding: 22rpx 18rpx 18rpx;
 		border-radius: 28rpx;
@@ -365,9 +371,14 @@
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 14rpx;
+		width: 100%;
+		box-sizing: border-box;
 	}
 
 	.status-card {
+		width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
 		min-height: 128rpx;
 		border-radius: 20rpx;
 		padding: 18rpx 16rpx;

@@ -24,10 +24,10 @@
           <view v-if="msg.role === 'assistant'" class="msg-avatar ai-avatar">
             <image class="avatar-img" src="/static/brand-icon.png" mode="aspectFit" />
           </view>
-          <view v-if="msg.role === 'assistant'" class="msg-bubble bubble-ai">
+          <view v-if="msg.role === 'assistant'" class="msg-bubble bubble-ai" @longpress="copyMessage(msg)">
             <rich-text class="rich-content" :nodes="msg.html || defaultHtml(msg.content)" />
           </view>
-          <view v-if="msg.role === 'user'" class="msg-bubble bubble-user">
+          <view v-if="msg.role === 'user'" class="msg-bubble bubble-user" @longpress="copyMessage(msg)">
             <template v-if="msg.type === 'image'">
               <image class="chat-image" :src="msg.filePath" mode="widthFix" />
               <text class="msg-text file-note">{{ msg.content }}</text>
@@ -169,8 +169,113 @@ export default {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;')
     },
+    formatMarkdownInline(text) {
+      const safeText = this.escapeHtml(text)
+
+      return safeText
+        .replace(/`([^`]+)`/g, '<code style="padding:2rpx 8rpx;border-radius:8rpx;background:#f1f5f9;color:#0f172a;font-family:monospace;font-size:24rpx;">$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="font-weight:700;color:#0f172a;">$1</strong>')
+    },
+    markdownToHtml(text) {
+      const source = String(text || '').replace(/\r\n/g, '\n').trim()
+      if (!source) {
+        return '<p style="margin:0;color:#1e293b;font-size:14px;line-height:1.8;"></p>'
+      }
+
+      const lines = source.split('\n')
+      const blocks = []
+      let index = 0
+
+      const isOrderedItem = (line) => /^\d+\.\s+/.test(line)
+      const isUnorderedItem = (line) => /^[-*+]\s+/.test(line)
+      const isListItem = (line) => isOrderedItem(line) || isUnorderedItem(line)
+      const flushParagraph = (buffer) => {
+        const content = buffer.join('<br/>')
+        if (content) {
+          blocks.push(`<p style="margin:0 0 18rpx;color:#1e293b;font-size:28rpx;line-height:1.7;">${this.formatMarkdownInline(content)}</p>`)
+        }
+        buffer.length = 0
+      }
+
+      while (index < lines.length) {
+        const line = lines[index]
+        const trimmed = line.trim()
+
+        if (!trimmed) {
+          index += 1
+          continue
+        }
+
+        if (/^```/.test(trimmed)) {
+          index += 1
+          const codeLines = []
+          while (index < lines.length && !/^```/.test(lines[index].trim())) {
+            codeLines.push(lines[index])
+            index += 1
+          }
+          if (index < lines.length) index += 1
+          const codeText = this.escapeHtml(codeLines.join('\n'))
+          blocks.push(
+            `<pre style="margin:0 0 18rpx;padding:18rpx 20rpx;border-radius:16rpx;background:#f8fafc;color:#0f172a;font-size:24rpx;line-height:1.6;overflow:hidden;white-space:pre-wrap;word-break:break-all;"><code style="font-family:monospace;">${codeText}</code></pre>`
+          )
+          continue
+        }
+
+        const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/)
+        if (headingMatch) {
+          const level = headingMatch[1].length
+          const fontSize = level === 1 ? '34rpx' : level === 2 ? '32rpx' : level === 3 ? '30rpx' : '28rpx'
+          const marginBottom = level <= 2 ? '18rpx' : '14rpx'
+          blocks.push(
+            `<p style="margin:0 0 ${marginBottom};font-size:${fontSize};line-height:1.35;font-weight:700;color:#0f172a;">${this.formatMarkdownInline(headingMatch[2])}</p>`
+          )
+          index += 1
+          continue
+        }
+
+        if (isListItem(trimmed)) {
+          const ordered = isOrderedItem(trimmed)
+          const tagName = ordered ? 'ol' : 'ul'
+          const listItems = []
+
+          while (index < lines.length) {
+            const current = lines[index].trim()
+            if (!current || (ordered ? !isOrderedItem(current) : !isUnorderedItem(current))) {
+              break
+            }
+            const itemText = current.replace(ordered ? /^\d+\.\s+/ : /^[-*+]\s+/, '')
+            listItems.push(`<li style="margin:0 0 10rpx;">${this.formatMarkdownInline(itemText)}</li>`)
+            index += 1
+          }
+
+          blocks.push(
+            `<${tagName} style="margin:0 0 18rpx;padding-left:36rpx;color:#1e293b;font-size:28rpx;line-height:1.7;">${listItems.join('')}</${tagName}>`
+          )
+          continue
+        }
+
+        const paragraphLines = [line]
+        index += 1
+        while (index < lines.length) {
+          const nextLine = lines[index]
+          const nextTrimmed = nextLine.trim()
+          if (!nextTrimmed) {
+            index += 1
+            break
+          }
+          if (/^```/.test(nextTrimmed) || /^#{1,6}\s+/.test(nextTrimmed) || isListItem(nextTrimmed)) {
+            break
+          }
+          paragraphLines.push(nextLine)
+          index += 1
+        }
+        flushParagraph(paragraphLines)
+      }
+
+      return blocks.join('')
+    },
     defaultHtml(text) {
-      return `<p style="color:#1e293b;font-size:14px;line-height:1.8;">${this.escapeHtml(text)}</p>`
+      return this.markdownToHtml(text)
     },
     getCurrentUserInfo() {
       return uni.getStorageSync('uni-id-pages-userInfo') || {}
@@ -463,6 +568,25 @@ export default {
     },
     goProfile() {
       uni.switchTab({ url: '/pages/profile/profile' })
+    },
+    copyMessage(message) {
+      const text = String(message && message.content ? message.content : '').trim()
+      if (!text) return
+
+      uni.showActionSheet({
+        itemList: ['复制'],
+        success: () => {
+          uni.setClipboardData({
+            data: text,
+            success: () => {
+              uni.showToast({ title: '已复制', icon: 'success' })
+            },
+            fail: () => {
+              uni.showToast({ title: '复制失败', icon: 'none' })
+            }
+          })
+        }
+      })
     }
   }
 }
@@ -580,6 +704,9 @@ export default {
 
 .msg-bubble {
   max-width: 540rpx;
+  width: fit-content;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 24rpx 28rpx;
   line-height: 1.7;
 }

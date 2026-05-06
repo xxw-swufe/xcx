@@ -115,9 +115,12 @@
 		display: flex; align-items: center; justify-content: center;
 	}
 
-	.content-area { flex: 1; overflow-y: auto; padding: 24rpx; }
+	.content-area { flex: 1; overflow-y: auto; padding: 24rpx; box-sizing: border-box; }
 
 	.form-card {
+		width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
 		background: #ffffff; border-radius: 24rpx; padding: 32rpx;
 		box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04);
 	}
@@ -135,7 +138,7 @@
 	}
 	.char-count { display: block; text-align: right; font-size: 20rpx; color: #9ca3af; margin-top: 8rpx; }
 
-	.upload-row { display: flex; gap: 16rpx; }
+	.upload-row { display: flex; gap: 16rpx; width: 100%; min-width: 0; box-sizing: border-box; }
 	.upload-add {
 		width: 160rpx; height: 160rpx; border-radius: 16rpx; background: #f0f7ff;
 		border: 2rpx dashed #93c5fd; display: flex; flex-direction: column;

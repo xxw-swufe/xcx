@@ -155,14 +155,15 @@ export default {
 		background: linear-gradient(135deg, #f97316, #ea580c);
 		display: flex; align-items: center; justify-content: center;
 	}
-	.content-area { flex: 1; overflow-y: auto; padding: 24rpx; }
+	.content-area { flex: 1; overflow-y: auto; padding: 24rpx; box-sizing: border-box; }
 	.tab-row { display: flex; gap: 12rpx; margin-bottom: 24rpx; }
 	.tab-item { padding: 12rpx 28rpx; border-radius: 20rpx; background: #e0f2fe; }
 	.tab-item.active { background: #1e3a8a; }
 	.tab-text { font-size: 24rpx; color: #6b7280; font-weight: 600; }
 	.tab-text.active { color: #ffffff; }
-	.order-list { display: flex; flex-direction: column; gap: 20rpx; }
+	.order-list { display: flex; flex-direction: column; gap: 20rpx; width: 100%; min-width: 0; box-sizing: border-box; }
 	.order-card {
+		width: 100%; min-width: 0; box-sizing: border-box;
 		background: #ffffff; border-radius: 20rpx; padding: 28rpx;
 		box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04);
 	}

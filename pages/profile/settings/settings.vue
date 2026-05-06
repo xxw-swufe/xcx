@@ -100,10 +100,13 @@ export default {
 		width: 48rpx; height: 48rpx; border-radius: 50%; background: linear-gradient(135deg, #f97316, #ea580c);
 		display: flex; align-items: center; justify-content: center;
 	}
-	.content-area { flex: 1; overflow-y: auto; padding: 24rpx; }
+.content-area { flex: 1; overflow-y: auto; padding: 24rpx; box-sizing: border-box; }
 	.section { margin-bottom: 28rpx; }
 	.section-label { display: block; font-size: 22rpx; font-weight: 700; color: #6b7280; margin-bottom: 12rpx; padding-left: 8rpx; }
-	.menu-card {
+.menu-card {
+		width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
 		background: #ffffff; border-radius: 20rpx; overflow: hidden;
 		box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04);
 	}

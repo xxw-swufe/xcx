@@ -164,10 +164,10 @@ export default {
 .back { width: 56rpx; height: 56rpx; border-radius: 14rpx; background: #f1f5f9; display: flex; align-items: center; justify-content: center; }
 .title { font-size: 32rpx; font-weight: 800; color: #1e1b4b; }
 .avatar { width: 44rpx; height: 44rpx; border-radius: 50%; background: linear-gradient(135deg, #1e3a8a, #3b82f6); display: flex; align-items: center; justify-content: center; }
-.content { flex: 1; overflow-y: auto; padding: 24rpx; }
+.content { flex: 1; overflow-y: auto; padding: 24rpx; box-sizing: border-box; }
 .headline { display: block; font-size: 32rpx; font-weight: 800; color: #1e1b4b; margin-bottom: 24rpx; }
 .plan-list { display: flex; flex-direction: column; gap: 16rpx; margin-bottom: 20rpx; }
-.plan { background: #ffffff; border-radius: 20rpx; padding: 28rpx; position: relative; border: 2rpx solid transparent; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); }
+.plan { width: 100%; min-width: 0; box-sizing: border-box; background: #ffffff; border-radius: 20rpx; padding: 28rpx; position: relative; border: 2rpx solid transparent; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); }
 .plan.selected { border-color: #6d5dfc; box-shadow: 0 8rpx 24rpx rgba(109,93,252,0.15); }
 .tag { position: absolute; top: 0; right: 0; background: #1e3a8a; border-radius: 0 20rpx 0 12rpx; padding: 6rpx 20rpx; color: #fff; font-size: 18rpx; font-weight: 700; }
 .row { display: flex; align-items: center; gap: 16rpx; margin-bottom: 8rpx; }
@@ -184,7 +184,7 @@ export default {
 .gift-emoji { font-size: 28rpx; color: #f97316; font-weight: 800; }
 .gift-title { display: block; font-size: 24rpx; color: #f97316; font-weight: 700; }
 .gift-sub { display: block; font-size: 20rpx; color: #9ca3af; }
-.feature-card { background: #ffffff; border-radius: 20rpx; padding: 26rpx; margin-bottom: 28rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); }
+.feature-card { width: 100%; min-width: 0; box-sizing: border-box; background: #ffffff; border-radius: 20rpx; padding: 26rpx; margin-bottom: 28rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04); }
 .feature-title { display: block; font-size: 28rpx; font-weight: 700; color: #1e1b4b; margin-bottom: 16rpx; }
 .feature-list { display: flex; flex-direction: column; gap: 12rpx; }
 .feature-item { display: flex; align-items: center; gap: 12rpx; }

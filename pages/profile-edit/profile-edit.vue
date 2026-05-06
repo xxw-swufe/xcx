@@ -147,6 +147,7 @@ export default {
 
 	.content {
 		padding: 48rpx 40rpx 40rpx;
+		box-sizing: border-box;
 	}
 
 	.avatar-wrap {
@@ -181,6 +182,7 @@ export default {
 
 	.form-block {
 		padding: 0 4rpx;
+		box-sizing: border-box;
 	}
 
 	.form-item {
@@ -210,6 +212,8 @@ export default {
 		justify-content: space-between;
 		padding: 0 24rpx;
 		box-sizing: border-box;
+		width: 100%;
+		min-width: 0;
 	}
 
 	.input {
@@ -229,6 +233,8 @@ export default {
 		align-items: center;
 		justify-content: center;
 		box-shadow: 0 14rpx 28rpx rgba(59, 130, 246, 0.28);
+		width: 100%;
+		box-sizing: border-box;
 	}
 
 	.submit-text {

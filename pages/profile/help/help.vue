@@ -125,7 +125,7 @@
 		display: flex; align-items: center; justify-content: center;
 	}
 
-	.content-area { flex: 1; overflow-y: auto; padding: 24rpx; }
+	.content-area { flex: 1; overflow-y: auto; padding: 24rpx; box-sizing: border-box; }
 
 	/* 搜索栏 */
 	.search-bar {
@@ -140,6 +140,9 @@
 
 	/* FAQ列表 */
 	.faq-list {
+		width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
 		background: #ffffff; border-radius: 20rpx; overflow: hidden;
 		box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04);
 	}
@@ -155,6 +158,9 @@
 
 	/* 联系我们 */
 	.contact-card {
+		width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
 		background: #ffffff; border-radius: 20rpx; padding: 24rpx;
 		box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04);
 	}
