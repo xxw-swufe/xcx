@@ -1,32 +1,20 @@
 <template>
 	<view class="page-container">
-		<!-- 顶部导航 -->
 		<view class="nav-header">
 			<view class="nav-left">
 				<image class="nav-logo" src="/static/brand-icon.png" mode="aspectFit"></image>
-				<text class="nav-title">管行宝</text>
+				<text class="nav-title">个人中心</text>
 			</view>
 		</view>
 
-		<!-- 内容区域 -->
 		<scroll-view class="content-area" scroll-y>
-			<!-- 用户信息卡片 -->
 			<view class="user-card">
 				<view class="user-main">
 					<view class="user-photo-wrap">
-						<image class="user-photo" src="/static/logo.png" mode="aspectFill"></image>
+						<image class="user-photo" :src="userProfile.avatar || defaultAvatar" mode="aspectFill"></image>
 					</view>
 					<view class="user-info">
-						<text class="user-name">管道保护使者</text>
-						<text class="user-title">西北管道运维部 · 首席工程师</text>
-						<view class="user-tags">
-							<view class="tag tag-green">
-								<text class="tag-text">高级专家</text>
-							</view>
-							<view class="tag tag-purple">
-								<text class="tag-text">工龄 12 年</text>
-							</view>
-						</view>
+						<text class="user-name">{{ userProfile.nickname || defaultNickname }}</text>
 					</view>
 				</view>
 				<view class="user-edit" @click="editProfile">
@@ -34,61 +22,59 @@
 				</view>
 			</view>
 
-			<!-- 账户与业务 -->
 			<view class="section">
 				<view class="section-divider">
 					<view class="divider-line"></view>
-					<text class="section-title">账户与业务</text>
+					<text class="section-title">常用功能</text>
 					<view class="divider-line"></view>
 				</view>
 				<view class="menu-card">
-					<view class="menu-item" @click="handleMenu('登录')">
+					<view class="menu-item" @click="handleMenu('通用设置')">
 						<view class="menu-icon-wrap icon-blue">
 							<uni-icons type="locked" size="20" color="#3b82f6"></uni-icons>
 						</view>
-						<text class="menu-name">登录</text>
+						<text class="menu-name">通用设置</text>
 						<uni-icons type="right" size="14" color="#c9cdd4"></uni-icons>
 					</view>
-					<view class="menu-item" @click="handleMenu('我的订单')">
+					<view class="menu-item" @click="handleMenu('订单管理')">
 						<view class="menu-icon-wrap icon-green">
 							<uni-icons type="cart" size="20" color="#22c55e"></uni-icons>
 						</view>
-						<text class="menu-name">我的订单</text>
+						<text class="menu-name">订单管理</text>
 						<uni-icons type="right" size="14" color="#c9cdd4"></uni-icons>
 					</view>
-					<view class="menu-item" @click="handleMenu('会员订阅')">
+					<view class="menu-item" @click="handleMenu('会员中心')">
 						<view class="menu-icon-wrap icon-purple">
 							<uni-icons type="medal" size="20" color="#8b5cf6"></uni-icons>
 						</view>
 						<view class="menu-name-col">
-							<text class="menu-name">会员订阅</text>
-							<text class="menu-sub">尊享高级指标权限</text>
+							<text class="menu-name">会员中心</text>
+							<text class="menu-sub">查看会员权益</text>
 						</view>
 						<uni-icons type="right" size="14" color="#c9cdd4"></uni-icons>
 					</view>
 				</view>
 			</view>
 
-			<!-- 设置与帮助 -->
 			<view class="section">
 				<view class="section-divider">
 					<view class="divider-line"></view>
-					<text class="section-title">设置与帮助</text>
+					<text class="section-title">更多服务</text>
 					<view class="divider-line"></view>
 				</view>
 				<view class="menu-card">
-					<view class="menu-item" @click="handleMenu('问题反馈')">
+					<view class="menu-item" @click="handleMenu('消息通知')">
 						<view class="menu-icon-wrap icon-orange">
 							<uni-icons type="chat" size="20" color="#f97316"></uni-icons>
 						</view>
-						<text class="menu-name">问题反馈</text>
+						<text class="menu-name">消息通知</text>
 						<uni-icons type="right" size="14" color="#c9cdd4"></uni-icons>
 					</view>
-					<view class="menu-item" @click="handleMenu('通用设置')">
+					<view class="menu-item" @click="handleMenu('系统设置')">
 						<view class="menu-icon-wrap icon-gray">
 							<uni-icons type="gear" size="20" color="#6b7280"></uni-icons>
 						</view>
-						<text class="menu-name">通用设置</text>
+						<text class="menu-name">系统设置</text>
 						<uni-icons type="right" size="14" color="#c9cdd4"></uni-icons>
 					</view>
 					<view class="menu-item" @click="handleMenu('帮助中心')">
@@ -101,7 +87,6 @@
 				</view>
 			</view>
 
-			<!-- 退出登录 -->
 			<view class="logout-area" @click="handleLogout">
 				<text class="logout-text">退出登录</text>
 			</view>
@@ -110,39 +95,63 @@
 </template>
 
 <script>
-	export default {
-		methods: {
-			editProfile() {
-				uni.navigateTo({ url: '/pages/profile-edit/profile-edit' })
+const USER_PROFILE_KEY = 'userProfile'
+const DEFAULT_AVATAR = '/static/logo.png'
+const DEFAULT_NICKNAME = '用户'
+
+export default {
+	data() {
+		return {
+			userProfile: {
+				nickname: DEFAULT_NICKNAME,
+				avatar: DEFAULT_AVATAR
 			},
-			handleMenu(name) {
-				const routes = {
-					'登录': '/pages/profile/settings/settings',
-					'我的订单': '/pages/profile/orders/orders',
-					'会员订阅': '/pages/profile/membership/membership',
-					'问题反馈': '/pages/profile/feedback/feedback',
-					'通用设置': '/pages/profile/settings/settings',
-					'帮助中心': '/pages/profile/help/help'
-				}
-				if (routes[name]) {
-					uni.navigateTo({ url: routes[name] })
-				} else {
-					uni.showToast({ title: `${name}（开发中）`, icon: 'none' })
-				}
-			},
-			handleLogout() {
-				uni.showModal({
-					title: '提示',
-					content: '确定退出登录吗？',
-					success: (res) => {
-						if (res.confirm) {
-							uni.reLaunch({ url: '/pages/login/login' })
-						}
-					}
-				})
+			defaultAvatar: DEFAULT_AVATAR,
+			defaultNickname: DEFAULT_NICKNAME
+		}
+	},
+	onShow() {
+		this.loadUserProfile()
+	},
+	methods: {
+		loadUserProfile() {
+			const profile = uni.getStorageSync(USER_PROFILE_KEY) || {}
+			this.userProfile = {
+				nickname: profile.nickname || DEFAULT_NICKNAME,
+				avatar: profile.avatar || DEFAULT_AVATAR
 			}
+		},
+		editProfile() {
+			uni.navigateTo({ url: '/pages/profile-edit/profile-edit' })
+		},
+		handleMenu(name) {
+			const routes = {
+				'通用设置': '/pages/profile/settings/settings',
+				'订单管理': '/pages/profile/orders/orders',
+				'会员中心': '/pages/profile/membership/membership',
+				'消息通知': '/pages/profile/feedback/feedback',
+				'系统设置': '/pages/profile/settings/settings',
+				'帮助中心': '/pages/profile/help/help'
+			}
+			if (routes[name]) {
+				uni.navigateTo({ url: routes[name] })
+			} else {
+				uni.showToast({ title: `${name}功能开发中`, icon: 'none' })
+			}
+		},
+		handleLogout() {
+			uni.showModal({
+				title: '提示',
+				content: '确定要退出登录吗？',
+				success: (res) => {
+					if (res.confirm) {
+						uni.reLaunch({ url: '/pages/login/login' })
+					}
+				}
+			})
 		}
 	}
+}
 </script>
 
 <style lang="scss" scoped>
@@ -153,7 +162,6 @@
 		background: #f4f5f9;
 	}
 
-	/* ====== 顶部导航 ====== */
 	.nav-header {
 		display: flex;
 		align-items: center;
@@ -182,40 +190,12 @@
 		letter-spacing: 2rpx;
 	}
 
-	.nav-right {
-		display: flex;
-		align-items: center;
-		gap: 16rpx;
-	}
-
-	.nav-bell {
-		width: 56rpx;
-		height: 56rpx;
-		border-radius: 50%;
-		background: #f3f4f6;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.nav-avatar {
-		width: 56rpx;
-		height: 56rpx;
-		border-radius: 50%;
-		background: linear-gradient(135deg, #f97316, #ea580c);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	/* ====== 内容区域 ====== */
 	.content-area {
 		flex: 1;
 		overflow-y: auto;
 		padding: 24rpx;
 	}
 
-	/* ====== 用户信息卡片 ====== */
 	.user-card {
 		display: flex;
 		align-items: center;
@@ -260,44 +240,6 @@
 		margin-bottom: 6rpx;
 	}
 
-	.user-title {
-		display: block;
-		font-size: 22rpx;
-		color: #6b7280;
-		margin-bottom: 14rpx;
-	}
-
-	.user-tags {
-		display: flex;
-		gap: 12rpx;
-	}
-
-	.tag {
-		padding: 4rpx 16rpx;
-		border-radius: 8rpx;
-	}
-
-	.tag-green {
-		background: #dcfce7;
-	}
-
-	.tag-purple {
-		background: #ede9fe;
-	}
-
-	.tag-green .tag-text {
-		color: #16a34a;
-	}
-
-	.tag-purple .tag-text {
-		color: #7c3aed;
-	}
-
-	.tag-text {
-		font-size: 20rpx;
-		font-weight: 700;
-	}
-
 	.user-edit {
 		width: 56rpx;
 		height: 56rpx;
@@ -310,7 +252,6 @@
 		margin-left: 16rpx;
 	}
 
-	/* ====== 通用分组 ====== */
 	.section {
 		margin-bottom: 24rpx;
 	}
@@ -342,7 +283,6 @@
 		flex-shrink: 0;
 	}
 
-	/* ====== 菜单卡片 ====== */
 	.menu-card {
 		background: #ffffff;
 		border-radius: 20rpx;
@@ -395,7 +335,6 @@
 		margin-top: 4rpx;
 	}
 
-	/* ====== 退出登录 ====== */
 	.logout-area {
 		padding: 40rpx 0;
 		display: flex;

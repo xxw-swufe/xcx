@@ -9,7 +9,7 @@
         </view>
       </view>
       <view class="nav-avatar" @click="goProfile">
-        <uni-icons type="person" size="20" color="#FFFFFF" />
+        <image class="avatar-img" :src="userProfile.avatar || defaultAvatar" mode="aspectFill" />
       </view>
     </view>
 
@@ -44,7 +44,7 @@
             <text v-else class="msg-text">{{ msg.content }}</text>
           </view>
           <view v-if="msg.role === 'user'" class="msg-avatar user-avatar">
-            <uni-icons type="person" size="18" color="#FFFFFF" />
+            <image class="avatar-img" :src="userProfile.avatar || defaultAvatar" mode="aspectFill" />
           </view>
         </view>
       </view>
@@ -83,6 +83,9 @@
         <view class="quick-btn" @click="handleAction('link')">
           <uni-icons type="link" size="20" color="#6b7280" />
         </view>
+        <view class="quick-btn quick-clear" @click="clearLocalChat">
+          <uni-icons type="trash" size="20" color="#FFFFFF" />
+        </view>
         <view class="quick-btn quick-upload" @click="goUpload">
           <uni-icons type="paperclip" size="20" color="#FFFFFF" />
         </view>
@@ -108,6 +111,9 @@
 import { getAiHistory, getAiSessions, sendAiMessage } from '@/utils/cloud-api'
 
 const SESSION_KEY = 'consult-current-session-id'
+const USER_PROFILE_KEY = 'userProfile'
+const DEFAULT_AVATAR = '/static/logo.png'
+const DEFAULT_NICKNAME = '用户'
 
 export default {
   data() {
@@ -122,10 +128,16 @@ export default {
       messages: [],
       pendingAttachments: [],
       streamTimer: null,
-      voiceStopTimer: null
+      voiceStopTimer: null,
+      userProfile: {
+        nickname: DEFAULT_NICKNAME,
+        avatar: DEFAULT_AVATAR
+      },
+      defaultAvatar: DEFAULT_AVATAR
     }
   },
   onShow() {
+    this.loadUserProfile()
     this.ensureLoginAndLoad()
   },
   onUnload() {
@@ -140,6 +152,13 @@ export default {
       if (this.voiceStopTimer) {
         clearTimeout(this.voiceStopTimer)
         this.voiceStopTimer = null
+      }
+    },
+    loadUserProfile() {
+      const profile = uni.getStorageSync(USER_PROFILE_KEY) || {}
+      this.userProfile = {
+        nickname: profile.nickname || DEFAULT_NICKNAME,
+        avatar: profile.avatar || DEFAULT_AVATAR
       }
     },
     escapeHtml(text) {
@@ -428,6 +447,17 @@ export default {
     removePending(index) {
       this.pendingAttachments.splice(index, 1)
     },
+    clearLocalChat() {
+      this.clearTimers()
+      this.inputText = ''
+      this.scrollTop = 0
+      this.messages = []
+      this.pendingAttachments = []
+      this.sessionId = ''
+      this.initialized = false
+      uni.removeStorageSync(SESSION_KEY)
+      uni.showToast({ title: '聊天记录已清空', icon: 'none' })
+    },
     goUpload() {
       uni.navigateTo({ url: '/pages/consult/upload' })
     },
@@ -492,10 +522,7 @@ export default {
   width: 64rpx;
   height: 64rpx;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
   box-shadow: 0 4rpx 12rpx rgba(59, 130, 246, 0.28);
 }
 
@@ -534,14 +561,21 @@ export default {
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, #1e3a8a, #2563eb);
   margin-left: 16rpx;
+  overflow: hidden;
 }
 
 .avatar-img {
   width: 40rpx;
   height: 40rpx;
   border-radius: 8rpx;
+}
+
+.nav-avatar .avatar-img,
+.msg-avatar .avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
 }
 
 .msg-bubble {
@@ -691,6 +725,11 @@ export default {
 .quick-upload {
   background: linear-gradient(135deg, #3b82f6, #2563eb);
   box-shadow: 0 4rpx 12rpx rgba(59, 130, 246, 0.3);
+}
+
+.quick-clear {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 4rpx 12rpx rgba(239, 68, 68, 0.26);
 }
 
 .input-row {

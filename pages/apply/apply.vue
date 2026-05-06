@@ -6,7 +6,7 @@
 				<text class="nav-title">管行宝</text>
 			</view>
 			<view class="nav-avatar">
-				<image class="avatar-img" src="/static/logo.png" mode="aspectFill"></image>
+				<image class="avatar-img" :src="userProfile.avatar || defaultAvatar" mode="aspectFill"></image>
 			</view>
 		</view>
 
@@ -70,11 +70,31 @@
 </template>
 
 <script>
+	const USER_PROFILE_KEY = 'userProfile'
+	const DEFAULT_AVATAR = '/static/logo.png'
+	const DEFAULT_NICKNAME = '用户'
+
 	export default {
 		data() {
-			return {}
+			return {
+				userProfile: {
+					nickname: DEFAULT_NICKNAME,
+					avatar: DEFAULT_AVATAR
+				},
+				defaultAvatar: DEFAULT_AVATAR
+			}
+		},
+		onShow() {
+			this.loadUserProfile()
 		},
 		methods: {
+			loadUserProfile() {
+				const profile = uni.getStorageSync(USER_PROFILE_KEY) || {}
+				this.userProfile = {
+					nickname: profile.nickname || DEFAULT_NICKNAME,
+					avatar: profile.avatar || DEFAULT_AVATAR
+				}
+			},
 			goDepartmentSearch() {
 				uni.navigateTo({ url: '/pages/apply/department-search' })
 			},

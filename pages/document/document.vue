@@ -5,7 +5,7 @@
         <image class="logo" src="/static/brand-icon.png" mode="aspectFit"></image>
         <text class="title">文书中心</text>
       </view>
-      <image class="avatar" src="/static/logo.png" mode="aspectFill"></image>
+      <image class="avatar" :src="userProfile.avatar || defaultAvatar" mode="aspectFill"></image>
     </view>
 
     <scroll-view class="hero" scroll-x :scroll-into-view="activeBannerId" scroll-with-animation>
@@ -67,9 +67,18 @@
 <script>
 import { getVipStatus } from '@/utils/vip'
 
+const USER_PROFILE_KEY = 'userProfile'
+const DEFAULT_AVATAR = '/static/logo.png'
+const DEFAULT_NICKNAME = '用户'
+
 export default {
   data() {
     return {
+      userProfile: {
+        nickname: DEFAULT_NICKNAME,
+        avatar: DEFAULT_AVATAR
+      },
+      defaultAvatar: DEFAULT_AVATAR,
       currentBanner: 0,
       activeBannerId: 'banner-0',
       banners: [
@@ -95,9 +104,17 @@ export default {
     }
   },
   onShow() {
+    this.loadUserProfile()
     this.syncVipStatus()
   },
   methods: {
+    loadUserProfile() {
+      const profile = uni.getStorageSync(USER_PROFILE_KEY) || {}
+      this.userProfile = {
+        nickname: profile.nickname || DEFAULT_NICKNAME,
+        avatar: profile.avatar || DEFAULT_AVATAR
+      }
+    },
     scrollToBanner(index) {
       this.currentBanner = index
       this.activeBannerId = `banner-${index}`

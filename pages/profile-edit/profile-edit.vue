@@ -9,44 +9,28 @@
 		</view>
 
 		<view class="content">
-			<view class="avatar-wrap">
+			<view class="avatar-wrap" @click="chooseAvatar">
 				<image
 					class="avatar-img"
-					:src="avatarUrl || '/static/logo.png'"
+					:src="avatar || DEFAULT_AVATAR"
 					mode="aspectFill"
 				></image>
-				<view class="avatar-plus" @click="chooseAvatar">
+				<view class="avatar-plus">
 					<uni-icons type="plusempty" size="15" color="#FFFFFF"></uni-icons>
 				</view>
 			</view>
 
 			<view class="form-block">
 				<view class="form-item">
-					<text class="label">昵称 <text class="required">*</text></text>
+					<text class="label">用户昵称 <text class="required">*</text></text>
 					<view class="input-card">
 						<input
 							class="input"
 							v-model="nickname"
-							placeholder="请输入昵称"
+							placeholder="请输入用户昵称"
 							maxlength="20"
 						/>
 					</view>
-				</view>
-
-				<view class="form-item wechat-item">
-					<text class="label">微信号 <text class="required">*</text></text>
-					<view class="input-card">
-						<input
-							class="input"
-							v-model="wechatId"
-							placeholder="请输入微信号"
-							maxlength="16"
-						/>
-						<view v-if="wechatValid" class="valid-icon">
-							<uni-icons type="checkmarkempty" size="18" color="#22C55E"></uni-icons>
-						</view>
-					</view>
-					<text class="hint">微信号只能使用字母、数字以及下划线，长度为4-16个字符</text>
 				</view>
 			</view>
 
@@ -58,53 +42,66 @@
 </template>
 
 <script>
-	export default {
-		data() {
-			return {
-				avatarUrl: '',
-				nickname: '',
-				wechatId: ''
-			}
+const USER_PROFILE_KEY = 'userProfile'
+const DEFAULT_AVATAR = '/static/logo.png'
+const DEFAULT_NICKNAME = '用户'
+
+export default {
+	data() {
+		return {
+			avatar: DEFAULT_AVATAR,
+			nickname: DEFAULT_NICKNAME
+		}
+	},
+	onShow() {
+		this.loadUserProfile()
+	},
+	methods: {
+		loadUserProfile() {
+			const profile = uni.getStorageSync(USER_PROFILE_KEY) || {}
+			this.nickname = profile.nickname || DEFAULT_NICKNAME
+			this.avatar = profile.avatar || DEFAULT_AVATAR
 		},
-		computed: {
-			wechatValid() {
-				const wechatReg = /^[a-zA-Z0-9_]{4,16}$/
-				return wechatReg.test(this.wechatId.trim())
-			}
+		goBack() {
+			uni.navigateBack()
 		},
-		methods: {
-			goBack() {
-				uni.navigateBack()
-			},
-			chooseAvatar() {
-				uni.chooseImage({
-					count: 1,
-					sizeType: ['compressed'],
-					sourceType: ['album', 'camera'],
-					success: (res) => {
-						this.avatarUrl = res.tempFilePaths[0]
-					}
-				})
-			},
-			handleDone() {
-				if (!this.nickname.trim()) {
-					uni.showToast({ title: '请输入昵称', icon: 'none' })
-					return
-				}
-				const wechatReg = /^[a-zA-Z0-9_]{4,16}$/
-				if (!wechatReg.test(this.wechatId.trim())) {
-					uni.showToast({ title: '微信号格式不正确', icon: 'none' })
-					return
-				}
-				uni.showToast({ title: '资料保存成功', icon: 'success' })
-				setTimeout(() => {
-					uni.switchTab({
-						url: '/pages/consult/consult'
+		chooseAvatar() {
+			uni.chooseImage({
+				count: 1,
+				sizeType: ['compressed'],
+				sourceType: ['album', 'camera'],
+				success: (res) => {
+					const filePath = (res.tempFilePaths && res.tempFilePaths[0]) || ''
+					if (!filePath) return
+					uni.saveFile({
+						tempFilePath: filePath,
+						success: (saveRes) => {
+							this.avatar = saveRes.savedFilePath || filePath
+						},
+						fail: () => {
+							this.avatar = filePath
+						}
 					})
-				}, 500)
+				}
+			})
+		},
+		handleDone() {
+			const nickname = this.nickname.trim()
+			if (!nickname) {
+				uni.showToast({ title: '昵称不能为空', icon: 'none' })
+				return
 			}
+			uni.setStorageSync(USER_PROFILE_KEY, {
+				nickname,
+				avatar: this.avatar || DEFAULT_AVATAR
+			})
+			uni.showToast({ title: '保存成功', icon: 'success' })
+			setTimeout(() => {
+				uni.navigateBack()
+			}, 300)
 		}
 	}
+}
 </script>
 
 <style lang="scss" scoped>
@@ -114,7 +111,6 @@
 		box-sizing: border-box;
 	}
 
-	/* 导航栏 */
 	.nav-bar {
 		height: calc(var(--status-bar-height, 44px) + 88rpx);
 		display: flex;
@@ -149,12 +145,10 @@
 		height: 60rpx;
 	}
 
-	/* 内容区 */
 	.content {
 		padding: 48rpx 40rpx 40rpx;
 	}
 
-	/* 头像区域 */
 	.avatar-wrap {
 		position: relative;
 		width: 160rpx;
@@ -185,7 +179,6 @@
 		border: 4rpx solid #ffffff;
 	}
 
-	/* 表单 */
 	.form-block {
 		padding: 0 4rpx;
 	}
@@ -226,27 +219,6 @@
 		color: #111827;
 	}
 
-	.wechat-item .input-card {
-		padding-right: 20rpx;
-	}
-
-	.valid-icon {
-		width: 36rpx;
-		height: 36rpx;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.hint {
-		display: block;
-		margin: 12rpx 0 0 6rpx;
-		font-size: 20rpx;
-		color: #9ca3af;
-		line-height: 32rpx;
-	}
-
-	/* 完成按钮 */
 	.submit-btn {
 		height: 96rpx;
 		margin: 64rpx 0 0;
@@ -260,9 +232,9 @@
 	}
 
 	.submit-text {
-		font-size: 32rpx;
-		font-weight: 700;
+		font-size: 30rpx;
+		font-weight: 800;
 		color: #ffffff;
-		letter-spacing: 4rpx;
+		letter-spacing: 2rpx;
 	}
 </style>

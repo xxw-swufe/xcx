@@ -55,10 +55,10 @@
     "backgroundColor": "#ffffff",
     "borderStyle": "black",
     "list": [
-      { "pagePath": "pages/consult/consult", "text": "咨询", "iconPath": "static/tabbar/consult.png", "selectedIconPath": "static/tabbar/consult_active.png" },
-      { "pagePath": "pages/document/document", "text": "文书", "iconPath": "static/tabbar/document.png", "selectedIconPath": "static/tabbar/document_active.png" },
-      { "pagePath": "pages/apply/apply", "text": "申报", "iconPath": "static/tabbar/apply.png", "selectedIconPath": "static/tabbar/apply_active.png" },
-      { "pagePath": "pages/profile/profile", "text": "我的", "iconPath": "static/tabbar/profile.png", "selectedIconPath": "static/tabbar/profile_active.png" }
+      { "pagePath": "pages/consult/consult", "text": "智能咨询", "iconPath": "static/tabbar/consult.png", "selectedIconPath": "static/tabbar/consult_active.png" },
+      { "pagePath": "pages/document/document", "text": "智能文书", "iconPath": "static/tabbar/document.png", "selectedIconPath": "static/tabbar/document_active.png" },
+      { "pagePath": "pages/apply/apply", "text": "审批报备", "iconPath": "static/tabbar/apply.png", "selectedIconPath": "static/tabbar/apply_active.png" },
+      { "pagePath": "pages/profile/profile", "text": "个人中心", "iconPath": "static/tabbar/profile.png", "selectedIconPath": "static/tabbar/profile_active.png" }
     ]
   },
   "uniIdRouter": {
