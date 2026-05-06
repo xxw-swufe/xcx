@@ -63,18 +63,11 @@
 					<view class="divider-line"></view>
 				</view>
 				<view class="menu-card">
-					<view class="menu-item" @click="handleMenu('消息通知')">
+					<view class="menu-item" @click="handleMenu('问题反馈')">
 						<view class="menu-icon-wrap icon-orange">
 							<uni-icons type="chat" size="20" color="#f97316"></uni-icons>
 						</view>
-						<text class="menu-name">消息通知</text>
-						<uni-icons type="right" size="14" color="#c9cdd4"></uni-icons>
-					</view>
-					<view class="menu-item" @click="handleMenu('系统设置')">
-						<view class="menu-icon-wrap icon-gray">
-							<uni-icons type="gear" size="20" color="#6b7280"></uni-icons>
-						</view>
-						<text class="menu-name">系统设置</text>
+						<text class="menu-name">问题反馈</text>
 						<uni-icons type="right" size="14" color="#c9cdd4"></uni-icons>
 					</view>
 					<view class="menu-item" @click="handleMenu('帮助中心')">
@@ -129,8 +122,7 @@ export default {
 				'通用设置': '/pages/profile/settings/settings',
 				'订单管理': '/pages/profile/orders/orders',
 				'会员中心': '/pages/profile/membership/membership',
-				'消息通知': '/pages/profile/feedback/feedback',
-				'系统设置': '/pages/profile/settings/settings',
+				'问题反馈': '/pages/profile/feedback/feedback',
 				'帮助中心': '/pages/profile/help/help'
 			}
 			if (routes[name]) {
