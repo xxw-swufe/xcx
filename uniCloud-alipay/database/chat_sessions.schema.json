@@ -21,7 +21,7 @@
     },
     "scene": {
       "bsonType": "string",
-      "enum": ["general", "document", "policy", "department"],
+      "enum": ["general", "document", "policy", "department", "letter"],
       "defaultValue": "general"
     },
     "coze_conversation_id": {

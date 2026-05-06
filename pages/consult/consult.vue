@@ -2,10 +2,13 @@
   <view class="consult-page">
     <view class="nav-header">
       <view class="nav-left">
+        <view v-if="showBack" class="nav-back" @click="handleBack">
+          <uni-icons type="left" size="18" color="#1e3a8a" />
+        </view>
         <image class="nav-logo" src="/static/brand-icon.png" mode="aspectFit" />
         <view class="nav-title-group">
-          <text class="nav-title">智能咨询</text>
-          <text class="nav-subtitle">只有你手动选中的附件，才会在点发送后一起发出</text>
+          <text class="nav-title">{{ pageTitle }}</text>
+          <text class="nav-subtitle">{{ pageSubtitle }}</text>
         </view>
       </view>
       <view class="nav-avatar" @click="goProfile">
@@ -110,12 +113,39 @@
 <script>
 import { getAiHistory, getAiSessions, sendAiMessage } from '@/utils/cloud-api'
 
-const SESSION_KEY = 'consult-current-session-id'
+const DEFAULT_SESSION_KEY = 'consult-current-session-id'
+const CLEARED_SESSION_KEY_SUFFIX = '-cleared'
 const USER_PROFILE_KEY = 'userProfile'
 const DEFAULT_AVATAR = '/static/logo.png'
 const DEFAULT_NICKNAME = '用户'
 
 export default {
+  props: {
+    scene: {
+      type: String,
+      default: 'general'
+    },
+    title: {
+      type: String,
+      default: '智能咨询'
+    },
+    showBack: {
+      type: Boolean,
+      default: false
+    },
+    backUrl: {
+      type: String,
+      default: ''
+    },
+    subtitle: {
+      type: String,
+      default: '只有你手动选中的附件，才会在点发送后一起发出'
+    },
+    sessionKey: {
+      type: String,
+      default: ''
+    }
+  },
   data() {
     return {
       inputText: '',
@@ -136,9 +166,25 @@ export default {
       defaultAvatar: DEFAULT_AVATAR
     }
   },
+  computed: {
+    pageScene() {
+      return this.scene || 'general'
+    },
+    pageTitle() {
+      return this.title || '智能咨询'
+    },
+    pageSubtitle() {
+      return this.subtitle || ''
+    },
+    storageSessionKey() {
+      return this.sessionKey || `${DEFAULT_SESSION_KEY}-${this.pageScene}`
+    },
+    clearedSessionKey() {
+      return `${this.storageSessionKey}${CLEARED_SESSION_KEY_SUFFIX}`
+    }
+  },
   onShow() {
-    this.loadUserProfile()
-    this.ensureLoginAndLoad()
+    this.initializeChat()
   },
   onUnload() {
     this.clearTimers()
@@ -160,6 +206,10 @@ export default {
         nickname: profile.nickname || DEFAULT_NICKNAME,
         avatar: profile.avatar || DEFAULT_AVATAR
       }
+    },
+    initializeChat() {
+      this.loadUserProfile()
+      this.ensureLoginAndLoad()
     },
     escapeHtml(text) {
       return String(text || '')
@@ -302,22 +352,40 @@ export default {
 
       const isSameUser = this.userId && this.userId === userId
       this.userId = userId
-      this.sessionId = uni.getStorageSync(SESSION_KEY) || ''
+      this.sessionId = uni.getStorageSync(this.storageSessionKey) || ''
+      const isCleared = !!uni.getStorageSync(this.clearedSessionKey)
+
+      if (isCleared) {
+        this.sessionId = ''
+      }
 
       if (this.loading) return
       if (this.initialized && isSameUser && this.messages.length) return
+
+      if (isCleared) {
+        if (!this.messages.length) {
+          this.messages = [this.getWelcomeMessage()]
+        }
+        this.initialized = true
+        this.scrollToBottom()
+        return
+      }
 
       this.loadSessions()
     },
     async loadSessions() {
       this.loading = true
       try {
-        const sessionRes = await getAiSessions(this.userId)
+        const sessionRes = await getAiSessions({
+          userId: this.userId,
+          scene: this.pageScene
+        })
         const list = (sessionRes && sessionRes.list) || []
 
         if (!this.sessionId && list.length) {
           this.sessionId = list[0]._id
-          uni.setStorageSync(SESSION_KEY, this.sessionId)
+          uni.setStorageSync(this.storageSessionKey, this.sessionId)
+          uni.removeStorageSync(this.clearedSessionKey)
         }
 
         if (this.sessionId) {
@@ -344,6 +412,7 @@ export default {
         const historyRes = await getAiHistory({
           userId: this.userId,
           sessionId,
+          scene: this.pageScene,
           limit: 50
         })
         const list = (historyRes && historyRes.list) || []
@@ -400,12 +469,12 @@ export default {
           userId: this.userId,
           sessionId: this.sessionId,
           content: summary,
-          scene: 'general'
+          scene: this.pageScene
         })
 
         if (result && result.sessionId) {
           this.sessionId = result.sessionId
-          uni.setStorageSync(SESSION_KEY, this.sessionId)
+          uni.setStorageSync(this.storageSessionKey, this.sessionId)
         }
 
         const reply = (result && result.reply) || '暂时没有返回有效内容，请稍后重试。'
@@ -560,7 +629,8 @@ export default {
       this.pendingAttachments = []
       this.sessionId = ''
       this.initialized = false
-      uni.removeStorageSync(SESSION_KEY)
+      uni.removeStorageSync(this.storageSessionKey)
+      uni.setStorageSync(this.clearedSessionKey, 1)
       uni.showToast({ title: '聊天记录已清空', icon: 'none' })
     },
     goUpload() {
@@ -568,6 +638,14 @@ export default {
     },
     goProfile() {
       uni.switchTab({ url: '/pages/profile/profile' })
+    },
+    handleBack() {
+      if (this.backUrl) {
+        uni.navigateTo({ url: this.backUrl })
+        return
+      }
+
+      uni.navigateBack()
     },
     copyMessage(message) {
       const text = String(message && message.content ? message.content : '').trim()
@@ -616,6 +694,18 @@ export default {
 .nav-left {
   display: flex;
   align-items: center;
+}
+
+.nav-back {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 14rpx;
+  background: #eef4ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12rpx;
+  flex-shrink: 0;
 }
 
 .nav-logo {

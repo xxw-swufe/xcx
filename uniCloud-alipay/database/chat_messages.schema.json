@@ -11,6 +11,12 @@
     "_id": {
       "description": "Message ID"
     },
+    "scene": {
+      "bsonType": "string",
+      "enum": ["general", "document", "policy", "department", "letter"],
+      "defaultValue": "general",
+      "description": "Message scene"
+    },
     "session_id": {
       "bsonType": "string",
       "description": "chat_sessions._id"
@@ -55,9 +61,25 @@
       }
     },
     {
+      "IndexName": "idx_session_scene_created",
+      "MgoKeySchema": {
+        "session_id": 1,
+        "scene": 1,
+        "created_at": 1
+      }
+    },
+    {
       "IndexName": "idx_user_created",
       "MgoKeySchema": {
         "user_id": 1,
+        "created_at": -1
+      }
+    },
+    {
+      "IndexName": "idx_user_scene_created",
+      "MgoKeySchema": {
+        "user_id": 1,
+        "scene": 1,
         "created_at": -1
       }
     }

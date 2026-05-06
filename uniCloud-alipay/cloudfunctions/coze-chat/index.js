@@ -7,6 +7,13 @@ const DEFAULT_COZE_API_BASE = 'https://api.coze.cn';
 const DEFAULT_COZE_BOT_ID = '7619186763315249193';
 const DEFAULT_COZE_TOKEN = 'sat_hBYTVDXcBXZEj30zDcCNwEZ4S6cGetB4uYvhupH2wefPDfcSZ8GtETvAdxMz7ZCh';
 const COZE_TIMEOUT = [60000, 60000];
+const BOT_ID_MAP = {
+  general: process.env.COZE_BOT_ID_GENERAL || process.env.COZE_BOT_ID || DEFAULT_COZE_BOT_ID,
+  letter: process.env.COZE_BOT_ID_LETTER || '7633245375314329600',
+  document: process.env.COZE_BOT_ID_DOCUMENT || process.env.COZE_BOT_ID || DEFAULT_COZE_BOT_ID,
+  policy: process.env.COZE_BOT_ID_POLICY || process.env.COZE_BOT_ID || DEFAULT_COZE_BOT_ID,
+  department: process.env.COZE_BOT_ID_DEPARTMENT || process.env.COZE_BOT_ID || DEFAULT_COZE_BOT_ID
+};
 
 function success(data = {}) {
   return { code: 0, message: 'ok', data };
@@ -32,9 +39,12 @@ function getRequesterUid(event) {
 function getCozeConfig() {
   return {
     token: process.env.COZE_API_TOKEN || process.env.COZE_BOT_TOKEN || DEFAULT_COZE_TOKEN,
-    botId: process.env.COZE_BOT_ID || DEFAULT_COZE_BOT_ID,
     apiBase: process.env.COZE_API_BASE || DEFAULT_COZE_API_BASE
   };
+}
+
+function getBotId(scene) {
+  return BOT_ID_MAP[scene] || BOT_ID_MAP.general;
 }
 
 function getTraceInfo(res) {
@@ -245,13 +255,15 @@ async function sendMessage(event) {
   await db.collection('chat_messages').add({
     session_id: currentSessionId,
     user_id: userId,
+    scene,
     role: 'user',
     content,
     content_type: 'text',
     created_at: currentTime
   });
 
-  const { token, botId, apiBase } = getCozeConfig();
+  const { token, apiBase } = getCozeConfig();
+  const botId = getBotId(scene);
   const oldConversationId = session && session.coze_conversation_id ? session.coze_conversation_id : '';
 
   let cozeResult;
@@ -277,6 +289,7 @@ async function sendMessage(event) {
     await db.collection('chat_messages').add({
       session_id: currentSessionId,
       user_id: userId,
+      scene,
       role: 'assistant',
       content: fallbackReply,
       content_type: 'text',
@@ -311,6 +324,7 @@ async function sendMessage(event) {
   await db.collection('chat_messages').add({
     session_id: currentSessionId,
     user_id: userId,
+    scene,
     role: 'assistant',
     content: reply,
     content_type: 'text',
@@ -343,7 +357,7 @@ async function sendMessage(event) {
 }
 
 async function getHistory(event) {
-  const { sessionId, limit = 50 } = event;
+  const { sessionId, limit = 50, scene = 'general' } = event;
   const userId = getRequesterUid(event);
 
   if (!userId || !sessionId) {
@@ -354,9 +368,10 @@ async function getHistory(event) {
   const session = (sessionDoc.data && sessionDoc.data[0]) || null;
   if (!session) return fail('session not found', 404);
   if (session.user_id !== userId) return fail('session does not belong to current user', 403);
+  if (session.scene !== scene) return fail('session scene mismatch', 403);
 
   const result = await db.collection('chat_messages')
-    .where({ user_id: userId, session_id: sessionId })
+    .where({ user_id: userId, session_id: sessionId, scene })
     .orderBy('created_at', 'asc')
     .limit(Math.min(Number(limit) || 50, 100))
     .get();
@@ -365,7 +380,7 @@ async function getHistory(event) {
 }
 
 async function getSessions(event) {
-  const { limit = 20 } = event;
+  const { limit = 20, scene = 'general' } = event;
   const userId = getRequesterUid(event);
 
   if (!userId) {
@@ -373,7 +388,7 @@ async function getSessions(event) {
   }
 
   const result = await db.collection('chat_sessions')
-    .where({ user_id: userId, status: dbCmd.neq('deleted') })
+    .where({ user_id: userId, scene, status: dbCmd.neq('deleted') })
     .orderBy('updated_at', 'desc')
     .limit(Math.min(Number(limit) || 20, 100))
     .get();

@@ -1,37 +1,36 @@
 <template>
-	<view class="page">
-		<view class="nav-header">
-			<view class="back-btn" @click="goBack"><uni-icons type="left" size="18" color="#1e3a8a"></uni-icons></view>
-			<text class="nav-title">{{ title }}</text>
-			<view class="nav-avatar"><image class="avatar-img" src="/static/logo.png" mode="aspectFill"></image></view>
-		</view>
-		<view class="content">
-			<view class="card">
-				<text class="card-title">{{ title }}</text>
-				<text class="card-sub">用于智能生成来往函件和正式回复，后续接入 AI 生成能力。</text>
-				<view class="tag">功能开发中</view>
-			</view>
-		</view>
-	</view>
+  <consult-chat
+    ref="chat"
+    scene="letter"
+    title="来往函件"
+    :show-back="true"
+    subtitle="只有你手动选中的附件，才会在点发送后一起发出"
+    session-key="letter-current-session-id"
+  />
 </template>
 
 <script>
+import ConsultChat from '../../consult/consult.vue'
+
 export default {
-	data() { return { title: '来往函件' } },
-	methods: { goBack() { uni.navigateBack() } }
+  components: {
+    ConsultChat
+  },
+  mounted() {
+    this.syncChat()
+  },
+  onShow() {
+    this.syncChat()
+  },
+  methods: {
+    syncChat() {
+      this.$nextTick(() => {
+        const chat = this.$refs.chat
+        if (chat && typeof chat.initializeChat === 'function') {
+          chat.initializeChat()
+        }
+      })
+    }
+  }
 }
 </script>
-
-<style lang="scss" scoped>
-.page{min-height:100vh;background:#f0f4ff}
-.nav-header{display:flex;align-items:center;justify-content:space-between;padding:calc(var(--status-bar-height, 44px) + 16rpx) 24rpx 16rpx;background:#fff}
-.back-btn{width:56rpx;height:56rpx;border-radius:14rpx;background:#eef4ff;display:flex;align-items:center;justify-content:center}
-.nav-title{font-size:32rpx;font-weight:800;color:#1e1b4b}
-.nav-avatar{width:48rpx;height:48rpx;border-radius:50%;overflow:hidden}
-.avatar-img{width:100%;height:100%}
-.content{padding:24rpx}
-.card{background:#fff;border-radius:24rpx;padding:28rpx;box-shadow:0 8rpx 24rpx rgba(30,58,138,.08)}
-.card-title{display:block;font-size:32rpx;font-weight:800;color:#1e3a8a;margin-bottom:12rpx}
-.card-sub{display:block;font-size:24rpx;color:#64748b;line-height:1.6}
-.tag{display:inline-flex;margin-top:20rpx;padding:10rpx 18rpx;border-radius:999rpx;background:#eff6ff;color:#2563eb;font-size:22rpx;font-weight:700}
-</style>

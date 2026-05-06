@@ -46,10 +46,11 @@ export function getAiHistory(payload) {
   });
 }
 
-export function getAiSessions(userId) {
+export function getAiSessions(payload) {
+  const data = typeof payload === 'string' ? { userId: payload } : (payload || {});
   return callCloud('coze-chat', {
     action: 'getSessions',
-    userId
+    ...data
   });
 }
 
