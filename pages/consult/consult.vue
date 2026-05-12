@@ -29,6 +29,17 @@
           </view>
           <view v-if="msg.role === 'assistant'" class="msg-bubble bubble-ai" @longpress="copyMessage(msg)">
             <rich-text v-if="msg.html" class="rich-content" :nodes="msg.html" />
+            <view v-if="msg.downloadLinks && msg.downloadLinks.length" class="download-links">
+              <view
+                v-for="(link, linkIdx) in msg.downloadLinks"
+                :key="link.url || linkIdx"
+                class="download-link"
+                @click.stop="downloadDocument(link)"
+              >
+                <uni-icons type="paperclip" size="14" color="#2563eb" />
+                <text class="download-link-text">{{ link.label }}</text>
+              </view>
+            </view>
             <view v-if="msg.expertCard" class="expert-card" @click.stop="openExpertCard(msg.expertCard)">
               <view class="expert-card-icon">
                 <text class="expert-card-icon-text">专</text>
@@ -339,6 +350,54 @@ export default {
     defaultHtml(text) {
       return this.markdownToHtml(text)
     },
+    normalizeUrl(url) {
+      return String(url || '').trim().replace(/[，。；;,.]+$/, '')
+    },
+    getFileNameFromUrl(url) {
+      const cleanUrl = this.normalizeUrl(url)
+      if (!cleanUrl) return 'Word 文件'
+      const path = cleanUrl.split('?')[0].split('#')[0]
+      const lastPart = path.split('/').pop() || 'Word 文件'
+      try {
+        return decodeURIComponent(lastPart) || 'Word 文件'
+      } catch (error) {
+        return lastPart || 'Word 文件'
+      }
+    },
+    isWordFileUrl(url) {
+      const cleanUrl = this.normalizeUrl(url)
+      if (!cleanUrl) return false
+      const path = cleanUrl.split('?')[0].split('#')[0].toLowerCase()
+      return path.endsWith('.doc') || path.endsWith('.docx')
+    },
+    extractDownloadLinks(text) {
+      const source = String(text || '')
+      const links = []
+      let cleaned = source
+
+      cleaned = cleaned.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/gi, (match, label, url) => {
+        if (!this.isWordFileUrl(url)) return match
+        links.push({
+          label: String(label || '').trim() || this.getFileNameFromUrl(url),
+          url: this.normalizeUrl(url)
+        })
+        return ''
+      })
+
+      cleaned = cleaned.replace(/https?:\/\/[^\s)\]，。]+/gi, (match) => {
+        if (!this.isWordFileUrl(match)) return match
+        links.push({
+          label: this.getFileNameFromUrl(match),
+          url: this.normalizeUrl(match)
+        })
+        return ''
+      })
+
+      return {
+        content: cleaned.replace(/\n{3,}/g, '\n\n').trim(),
+        links
+      }
+    },
     extractExpertCard(text) {
       const source = String(text || '')
       const hasExpertMarker = /专家咨询链接|专家姓名/.test(source)
@@ -380,15 +439,17 @@ export default {
         .trim()
     },
     buildAssistantMessage(content, extra = {}) {
+      const downloadBlock = this.extractDownloadLinks(content)
       const expertCard = this.extractExpertCard(content)
-      const displayContent = this.removeExpertCardLines(content, expertCard)
+      const displayContent = this.removeExpertCardLines(downloadBlock.content, expertCard)
 
       return {
         ...extra,
         role: 'assistant',
         content,
         html: displayContent ? this.defaultHtml(displayContent) : '',
-        expertCard
+        expertCard,
+        downloadLinks: downloadBlock.links
       }
     },
     getCurrentUserInfo() {
@@ -565,7 +626,8 @@ export default {
         role: 'assistant',
         content: '',
         html: '',
-        expertCard: null
+        expertCard: null,
+        downloadLinks: []
       }
       this.messages.push(msg)
       this.scrollToBottom()
@@ -596,6 +658,7 @@ export default {
           targetMsg.content += chars[index]
           targetMsg.html = this.defaultHtml(targetMsg.content)
           targetMsg.expertCard = null
+          targetMsg.downloadLinks = []
           this.$set(this.messages, this.messages.length - 1, { ...targetMsg })
           index += 1
           this.scrollToBottom()
@@ -726,6 +789,41 @@ export default {
               uni.showToast({ title: '链接已复制', icon: 'none' })
             }
           })
+        }
+      })
+    },
+    downloadDocument(link) {
+      const url = this.normalizeUrl(link && link.url)
+      if (!url) return
+
+      const fileName = (link && link.label) || this.getFileNameFromUrl(url)
+      const fileType = this.isWordFileUrl(url) ? (url.split('?')[0].split('#')[0].toLowerCase().endsWith('.docx') ? 'docx' : 'doc') : ''
+
+      uni.showLoading({ title: '正在下载' })
+      uni.downloadFile({
+        url,
+        success: (res) => {
+          if (!res || res.statusCode !== 200 || !res.tempFilePath) {
+            uni.hideLoading()
+            uni.showToast({ title: '下载失败', icon: 'none' })
+            return
+          }
+
+          uni.openDocument({
+            filePath: res.tempFilePath,
+            fileType,
+            success: () => {
+              uni.hideLoading()
+            },
+            fail: () => {
+              uni.hideLoading()
+              uni.showToast({ title: '打开失败', icon: 'none' })
+            }
+          })
+        },
+        fail: () => {
+          uni.hideLoading()
+          uni.showToast({ title: '下载失败', icon: 'none' })
         }
       })
     },
@@ -936,6 +1034,27 @@ export default {
 .rich-content {
   font-size: 28rpx;
   line-height: 1.7;
+}
+
+.download-links {
+  margin-top: 12rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  color: #2563eb;
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.download-link-text {
+  color: #2563eb;
+  text-decoration: underline;
 }
 
 .expert-card {
