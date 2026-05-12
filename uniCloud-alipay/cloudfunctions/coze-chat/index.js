@@ -234,6 +234,7 @@ async function getOrCreateSession(userId, sessionId, content, scene) {
 
 async function sendMessage(event) {
   const { sessionId, content, scene = 'general' } = event;
+  const attachments = Array.isArray(event.attachments) ? event.attachments : [];
   const userId = getRequesterUid(event);
 
   if (!userId || !content) {
@@ -244,7 +245,8 @@ async function sendMessage(event) {
     userId: String(userId),
     sessionId: sessionId || '',
     scene,
-    contentLength: String(content).length
+    contentLength: String(content).length,
+    attachmentCount: attachments.length
   });
 
   const sessionResult = await getOrCreateSession(userId, sessionId, content, scene);
@@ -259,6 +261,7 @@ async function sendMessage(event) {
     role: 'user',
     content,
     content_type: 'text',
+    raw_response: attachments.length ? { attachments } : {},
     created_at: currentTime
   });
 

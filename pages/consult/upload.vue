@@ -11,6 +11,7 @@
     </view>
 
     <scroll-view class="content-area" scroll-y>
+      <view class="content-inner">
       <view class="drop-zone" @click="chooseFile">
         <view class="drop-icon">
           <uni-icons type="cloud-upload" size="48" color="#6d5dfc" />
@@ -67,6 +68,7 @@
         </view>
         <text class="notice-text">单个文件建议不超过 50MB，图片和 PDF 格式优先。</text>
       </view>
+      </view>
     </scroll-view>
 
     <view class="bottom-area">
@@ -82,7 +84,8 @@
 export default {
   data() {
     return {
-      uploadedFiles: []
+      uploadedFiles: [],
+      uploading: false
     }
   },
   methods: {
@@ -90,40 +93,137 @@ export default {
       uni.navigateBack()
     },
     chooseFile() {
+      if (typeof uni.chooseMessageFile === 'function') {
+        uni.chooseMessageFile({
+          count: 1,
+          type: 'file',
+          success: (res) => {
+            const file = (res.tempFiles && res.tempFiles[0]) || {}
+            const name = file.name || (file.path ? file.path.split('/').pop() : '文件')
+            const path = file.path || file.tempFilePath || ''
+            this.addAndUploadFile({
+              name,
+              path,
+              size: file.size || 0
+            })
+          },
+          fail: () => {
+            uni.showToast({ title: '未能选择文件', icon: 'none' })
+          }
+        })
+        return
+      }
+
       uni.chooseImage({
         count: 1,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
         success: (res) => {
-          const file = res.tempFiles[0]
-          this.uploadedFiles.push({
-            name: file.path.split('/').pop() || '文件.jpg',
-            size: (file.size / 1024 / 1024).toFixed(1) + ' MB',
-            isImage: true,
-            thumb: file.path,
-            progress: 0
+          const file = (res.tempFiles && res.tempFiles[0]) || {}
+          const filePath = file.path || file.tempFilePath || (res.tempFilePaths && res.tempFilePaths[0]) || ''
+          const name = filePath ? filePath.split('/').pop() : '文件.jpg'
+          this.addAndUploadFile({
+            name,
+            path: filePath,
+            size: file.size || 0
           })
-          this.mockUpload(this.uploadedFiles.length - 1)
         }
       })
     },
-    mockUpload(index) {
-      const file = this.uploadedFiles[index]
-      if (!file) return
-      const timer = setInterval(() => {
-        file.progress += 15
-        if (file.progress >= 100) {
-          file.progress = 100
-          clearInterval(timer)
+    formatFileSize(size) {
+      return size ? (size / 1024 / 1024).toFixed(1) + ' MB' : '未知大小'
+    },
+    getCloudPath(fileName) {
+      const safeName = String(fileName || 'file').replace(/[\\/:*?"<>|#%&{}$!'@+=`]/g, '_')
+      return `chat-uploads/${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`
+    },
+    addAndUploadFile(file) {
+      const name = file.name || '文件'
+      const path = file.path || ''
+      const isImage = /\.(png|jpe?g|gif|bmp|webp)$/i.test(name)
+      const index = this.uploadedFiles.length
+
+      this.uploadedFiles.push({
+        name,
+        size: this.formatFileSize(file.size),
+        isImage,
+        thumb: isImage ? path : '',
+        progress: 0,
+        status: 'uploading',
+        fileID: ''
+      })
+
+      if (!path) {
+        this.$set(this.uploadedFiles, index, {
+          ...this.uploadedFiles[index],
+          status: 'failed'
+        })
+        uni.showToast({ title: '文件路径无效', icon: 'none' })
+        return
+      }
+
+      this.uploading = true
+      uniCloud.uploadFile({
+        filePath: path,
+        cloudPath: this.getCloudPath(name),
+        onUploadProgress: (event) => {
+          const progress = event && event.total ? Math.round((event.loaded / event.total) * 100) : 0
+          const current = this.uploadedFiles[index]
+          if (current) {
+            this.$set(this.uploadedFiles, index, {
+              ...current,
+              progress
+            })
+          }
         }
-        this.$set(this.uploadedFiles, index, { ...file })
-      }, 300)
+      }).then(async (res) => {
+        const fileID = res.fileID || ''
+        let fileUrl = fileID
+
+        if (fileID && uniCloud.getTempFileURL) {
+          try {
+            const urlRes = await uniCloud.getTempFileURL({ fileList: [fileID] })
+            const fileItem = urlRes && urlRes.fileList && urlRes.fileList[0]
+            fileUrl = (fileItem && (fileItem.tempFileURL || fileItem.download_url)) || fileID
+          } catch (error) {
+            console.warn('get temp file url failed', error)
+          }
+        }
+
+        const current = this.uploadedFiles[index]
+        if (current) {
+          this.$set(this.uploadedFiles, index, {
+            ...current,
+            progress: 100,
+            status: 'done',
+            fileID,
+            fileUrl
+          })
+        }
+        uni.showToast({ title: '上传成功', icon: 'success' })
+      }).catch((error) => {
+        console.error('upload file failed', error)
+        const current = this.uploadedFiles[index]
+        if (current) {
+          this.$set(this.uploadedFiles, index, {
+            ...current,
+            status: 'failed'
+          })
+        }
+        uni.showToast({ title: '上传失败', icon: 'none' })
+      }).finally(() => {
+        this.uploading = this.uploadedFiles.some((item) => item.status === 'uploading')
+      })
     },
     removeFile(idx) {
       this.uploadedFiles.splice(idx, 1)
     },
     handleComplete() {
-      uni.showToast({ title: '上传完成', icon: 'success' })
+      if (this.uploading) {
+        uni.showToast({ title: '文件上传中', icon: 'none' })
+        return
+      }
+
       setTimeout(() => {
         uni.navigateBack()
       }, 500)
@@ -170,7 +270,12 @@ export default {
 .content-area {
   flex: 1;
   overflow-y: auto;
-  padding: 24rpx;
+  box-sizing: border-box;
+}
+
+.content-inner {
+  padding: 72rpx 24rpx 40rpx;
+  box-sizing: border-box;
 }
 
 .drop-zone {

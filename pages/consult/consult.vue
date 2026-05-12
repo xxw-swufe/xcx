@@ -67,6 +67,15 @@
                 </view>
               </view>
             </template>
+            <template v-else-if="msg.type === 'file'">
+              <view class="audio-card">
+                <uni-icons type="paperclip" size="18" color="#1e3a8a" />
+                <view class="audio-info">
+                  <text class="msg-text">{{ msg.content }}</text>
+                  <text class="file-note">{{ msg.extra || '' }}</text>
+                </view>
+              </view>
+            </template>
             <text v-else class="msg-text">{{ msg.content }}</text>
           </view>
           <view v-if="msg.role === 'user'" class="msg-avatar user-avatar">
@@ -88,6 +97,9 @@
           </view>
           <view class="pending-preview pending-audio" v-else-if="item.type === 'audio'">
             <uni-icons type="mic" size="18" color="#1e3a8a" />
+          </view>
+          <view class="pending-preview pending-file" v-else-if="item.type === 'file'">
+            <uni-icons type="paperclip" size="18" color="#1e3a8a" />
           </view>
           <view class="pending-info">
             <text class="pending-title">{{ item.title }}</text>
@@ -180,6 +192,7 @@ export default {
       userId: '',
       messages: [],
       pendingAttachments: [],
+      uploadingAttachments: false,
       streamTimer: null,
       voiceStopTimer: null,
       userProfile: {
@@ -556,17 +569,108 @@ export default {
         console.error('loadHistory failed', error)
       }
     },
-    buildPendingSummary(text) {
+    buildPendingSummary(text, attachments = this.pendingAttachments) {
       const parts = []
       if (text) parts.push(text)
-      this.pendingAttachments.forEach((item) => {
+      attachments.forEach((item) => {
+        const fileUrl = item.fileUrl || item.url || item.fileID || ''
         if (item.type === 'image') {
           parts.push(`图片附件：${item.title}`)
         } else if (item.type === 'audio') {
           parts.push(`语音附件：${item.title}`)
+        } else {
+          parts.push(`文件附件：${item.title}`)
+        }
+
+        if (fileUrl) {
+          parts.push(`附件地址：${fileUrl}`)
         }
       })
       return parts.join('\n')
+    },
+    getFileExt(fileName) {
+      const match = String(fileName || '').match(/\.([^.?#/]+)$/)
+      return match ? match[1].toLowerCase() : ''
+    },
+    getCloudPath(fileName) {
+      const safeName = String(fileName || 'file').replace(/[\\/:*?"<>|#%&{}$!'@+=`]/g, '_')
+      return `chat-attachments/${this.userId || 'anonymous'}/${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`
+    },
+    uploadAttachment(item) {
+      if (!item || !item.filePath) {
+        return Promise.resolve(item)
+      }
+
+      if (item.fileID || item.fileUrl) {
+        return Promise.resolve(item)
+      }
+
+      const cloudPath = this.getCloudPath(item.title)
+      return uniCloud.uploadFile({
+        filePath: item.filePath,
+        cloudPath,
+        onUploadProgress: (progressEvent) => {
+          const progress = progressEvent && progressEvent.total
+            ? Math.round((progressEvent.loaded / progressEvent.total) * 100)
+            : 0
+          const index = this.pendingAttachments.findIndex((pending) => pending.id === item.id)
+          if (index > -1) {
+            this.$set(this.pendingAttachments, index, {
+              ...this.pendingAttachments[index],
+              subtitle: progress > 0 ? `上传中 ${progress}%` : '上传中'
+            })
+          }
+        }
+      }).then(async (res) => {
+        const fileID = res.fileID || ''
+        let fileUrl = fileID
+
+        if (fileID && uniCloud.getTempFileURL) {
+          try {
+            const urlRes = await uniCloud.getTempFileURL({ fileList: [fileID] })
+            const fileItem = urlRes && urlRes.fileList && urlRes.fileList[0]
+            fileUrl = (fileItem && (fileItem.tempFileURL || fileItem.download_url)) || fileID
+          } catch (error) {
+            console.warn('get temp file url failed', error)
+          }
+        }
+
+        const uploaded = {
+          ...item,
+          subtitle: '已上传',
+          fileID,
+          fileUrl,
+          cloudPath
+        }
+        const index = this.pendingAttachments.findIndex((pending) => pending.id === item.id)
+        if (index > -1) {
+          this.$set(this.pendingAttachments, index, uploaded)
+        }
+        return uploaded
+      })
+    },
+    async uploadPendingAttachments() {
+      if (!this.pendingAttachments.length) return []
+      this.uploadingAttachments = true
+      try {
+        const uploaded = []
+        for (const item of this.pendingAttachments) {
+          uploaded.push(await this.uploadAttachment(item))
+        }
+        return uploaded
+      } finally {
+        this.uploadingAttachments = false
+      }
+    },
+    normalizeAttachmentForRequest(item) {
+      return {
+        type: item.type || 'file',
+        name: item.title || '文件',
+        url: item.fileUrl || item.fileID || '',
+        fileID: item.fileID || '',
+        size: item.fileSize || 0,
+        ext: this.getFileExt(item.title)
+      }
     },
     async sendMessage() {
       const text = this.inputText.trim()
@@ -580,12 +684,23 @@ export default {
       this.clearTimers()
       this.sending = true
 
-      const summary = this.buildPendingSummary(text)
+      let uploadedAttachments = []
+      try {
+        uploadedAttachments = await this.uploadPendingAttachments()
+      } catch (error) {
+        console.error('upload attachments failed', error)
+        this.sending = false
+        uni.showToast({ title: '附件上传失败', icon: 'none' })
+        return
+      }
+
+      const requestAttachments = uploadedAttachments.map(this.normalizeAttachmentForRequest)
+      const summary = this.buildPendingSummary(text, uploadedAttachments)
       this.messages.push({
         id: `user-${Date.now()}`,
         role: 'user',
         content: summary,
-        type: 'text'
+        type: uploadedAttachments.length === 1 ? uploadedAttachments[0].type : 'text'
       })
 
       this.inputText = ''
@@ -599,7 +714,8 @@ export default {
           userId: this.userId,
           sessionId: this.sessionId,
           content: summary,
-          scene: this.pageScene
+          scene: this.pageScene,
+          attachments: requestAttachments
         })
 
         if (result && result.sessionId) {
@@ -689,6 +805,33 @@ export default {
       }
     },
     pickCameraImage() {
+      if (typeof uni.chooseMessageFile === 'function') {
+        uni.chooseMessageFile({
+          count: 1,
+          type: 'file',
+          success: (res) => {
+            const file = (res.tempFiles && res.tempFiles[0]) || {}
+            const filePath = file.path || file.tempFilePath || ''
+            const fileName = file.name || (filePath ? filePath.split('/').pop() : '文件')
+            const isImage = /\.(png|jpe?g|gif|bmp|webp)$/i.test(fileName)
+            this.pendingAttachments.push({
+              id: `${isImage ? 'img' : 'file'}-${Date.now()}`,
+              type: isImage ? 'image' : 'file',
+              title: fileName,
+              subtitle: '等待发送',
+              filePath,
+              fileSize: file.size || 0
+            })
+            this.scrollToBottom()
+            uni.showToast({ title: '文件已加入待发送区', icon: 'none' })
+          },
+          fail: () => {
+            uni.showToast({ title: '未能选择文件', icon: 'none' })
+          }
+        })
+        return
+      }
+
       uni.chooseImage({
         count: 1,
         sourceType: ['camera'],
@@ -1160,6 +1303,10 @@ export default {
 
 .pending-audio {
   background: #dbeafe;
+}
+
+.pending-file {
+  background: #e0f2fe;
 }
 
 .pending-image {
