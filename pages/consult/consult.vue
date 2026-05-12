@@ -87,7 +87,7 @@
           <uni-icons type="link" size="20" color="#6b7280" />
         </view>
         <view class="quick-btn quick-clear" @click="clearLocalChat">
-          <uni-icons type="trash" size="20" color="#FFFFFF" />
+          <uni-icons type="trash" size="20" color="#6b7280" />
         </view>
         <view class="quick-btn quick-upload" @click="goUpload">
           <uni-icons type="paperclip" size="20" color="#FFFFFF" />
@@ -475,6 +475,7 @@ export default {
         if (result && result.sessionId) {
           this.sessionId = result.sessionId
           uni.setStorageSync(this.storageSessionKey, this.sessionId)
+          uni.removeStorageSync(this.clearedSessionKey)
         }
 
         const reply = (result && result.reply) || '暂时没有返回有效内容，请稍后重试。'
@@ -945,8 +946,8 @@ export default {
 }
 
 .quick-clear {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  box-shadow: 0 4rpx 12rpx rgba(239, 68, 68, 0.26);
+  background: #f1f5f9;
+  box-shadow: none;
 }
 
 .input-row {
