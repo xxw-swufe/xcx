@@ -4,6 +4,7 @@
     { "path": "pages/profile-edit/profile-edit", "style": { "navigationStyle": "custom" } },
     { "path": "pages/consult/consult", "style": { "navigationStyle": "custom" } },
     { "path": "pages/consult/upload", "style": { "navigationStyle": "custom" } },
+    { "path": "pages/consult/expert-webview", "style": { "navigationBarTitleText": "专家咨询" } },
     { "path": "pages/document/document", "style": { "navigationStyle": "custom" } },
     { "path": "pages/document/letter/letter", "style": { "navigationStyle": "custom" } },
     { "path": "pages/document/construction/construction", "style": { "navigationStyle": "custom" } },

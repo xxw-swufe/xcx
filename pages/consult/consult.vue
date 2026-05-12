@@ -28,7 +28,19 @@
             <image class="avatar-img" src="/static/brand-icon.png" mode="aspectFit" />
           </view>
           <view v-if="msg.role === 'assistant'" class="msg-bubble bubble-ai" @longpress="copyMessage(msg)">
-            <rich-text class="rich-content" :nodes="msg.html || defaultHtml(msg.content)" />
+            <rich-text v-if="msg.html" class="rich-content" :nodes="msg.html" />
+            <view v-if="msg.expertCard" class="expert-card" @click.stop="openExpertCard(msg.expertCard)">
+              <view class="expert-card-icon">
+                <text class="expert-card-icon-text">专</text>
+              </view>
+              <view class="expert-card-main">
+                <text class="expert-card-name">{{ msg.expertCard.name }}</text>
+                <text class="expert-card-subtitle">点击进入实时专家咨询</text>
+              </view>
+              <view class="expert-card-action">
+                <uni-icons type="right" size="16" color="#2563eb" />
+              </view>
+            </view>
           </view>
           <view v-if="msg.role === 'user'" class="msg-bubble bubble-user" @longpress="copyMessage(msg)">
             <template v-if="msg.type === 'image'">
@@ -327,17 +339,66 @@ export default {
     defaultHtml(text) {
       return this.markdownToHtml(text)
     },
+    extractExpertCard(text) {
+      const source = String(text || '')
+      const hasExpertMarker = /专家咨询链接|专家姓名/.test(source)
+      if (!hasExpertMarker) return null
+
+      const markdownLink = source.match(/\[专家咨询链接\]\((https?:\/\/[^)\s]+)\)/i)
+      const labelLink = source.match(/专家咨询链接\s*[：:]\s*(https?:\/\/[^\s)\]，。]+)/i)
+      const urlMatch = labelLink || markdownLink || source.match(/https?:\/\/[^\s)\]，。]+/i)
+      if (!urlMatch) return null
+
+      const rawUrl = labelLink ? labelLink[1] : markdownLink ? markdownLink[1] : urlMatch[0]
+      const url = String(rawUrl || '').replace(/[，。；;,.]+$/, '')
+      if (!url) return null
+
+      const nameMatch = source.match(/专家姓名\s*[：:]\s*([^\s\n\r，。]+)/)
+      const name = nameMatch && nameMatch[1] ? nameMatch[1].trim() : '专家咨询'
+
+      return {
+        name,
+        url
+      }
+    },
+    removeExpertCardLines(text, card) {
+      if (!card) return String(text || '')
+
+      return String(text || '')
+        .split('\n')
+        .filter((line) => {
+          const trimmed = line.trim()
+          if (!trimmed) return true
+          if (/专家咨询链接\s*[：:]/.test(trimmed)) return false
+          if (/^\[专家咨询链接\]\(https?:\/\/[^)]+\)/i.test(trimmed)) return false
+          if (/专家姓名\s*[：:]/.test(trimmed)) return false
+          if (trimmed === card.url) return false
+          return true
+        })
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    },
+    buildAssistantMessage(content, extra = {}) {
+      const expertCard = this.extractExpertCard(content)
+      const displayContent = this.removeExpertCardLines(content, expertCard)
+
+      return {
+        ...extra,
+        role: 'assistant',
+        content,
+        html: displayContent ? this.defaultHtml(displayContent) : '',
+        expertCard
+      }
+    },
     getCurrentUserInfo() {
       return uni.getStorageSync('uni-id-pages-userInfo') || {}
     },
     getWelcomeMessage() {
       const content = '你好，我是智能咨询助手。请先输入问题，或者手动添加图片、语音附件后再发送。'
-      return {
+      return this.buildAssistantMessage(content, {
         id: 'welcome',
-        role: 'assistant',
-        content,
-        html: this.defaultHtml(content)
-      }
+      })
     },
     ensureLoginAndLoad() {
       const userInfo = this.getCurrentUserInfo()
@@ -416,12 +477,20 @@ export default {
           limit: 50
         })
         const list = (historyRes && historyRes.list) || []
-        this.messages = list.map((item) => ({
-          id: item._id,
-          role: item.role,
-          content: item.content,
-          html: item.role === 'assistant' ? this.defaultHtml(item.content) : ''
-        }))
+        this.messages = list.map((item) => {
+          if (item.role === 'assistant') {
+            return this.buildAssistantMessage(item.content, {
+              id: item._id
+            })
+          }
+
+          return {
+            id: item._id,
+            role: item.role,
+            content: item.content,
+            html: ''
+          }
+        })
       } catch (error) {
         console.error('loadHistory failed', error)
       }
@@ -495,7 +564,8 @@ export default {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: '',
-        html: this.defaultHtml('')
+        html: '',
+        expertCard: null
       }
       this.messages.push(msg)
       this.scrollToBottom()
@@ -513,8 +583,10 @@ export default {
           }
 
           if (index >= chars.length) {
-            targetMsg.content = text
-            targetMsg.html = this.defaultHtml(text)
+            const finalMsg = this.buildAssistantMessage(text, {
+              id: targetMsg.id
+            })
+            Object.assign(targetMsg, finalMsg)
             this.$set(this.messages, this.messages.length - 1, { ...targetMsg })
             this.scrollToBottom()
             resolve()
@@ -523,6 +595,7 @@ export default {
 
           targetMsg.content += chars[index]
           targetMsg.html = this.defaultHtml(targetMsg.content)
+          targetMsg.expertCard = null
           this.$set(this.messages, this.messages.length - 1, { ...targetMsg })
           index += 1
           this.scrollToBottom()
@@ -639,6 +712,22 @@ export default {
     },
     goProfile() {
       uni.switchTab({ url: '/pages/profile/profile' })
+    },
+    openExpertCard(card) {
+      if (!card || !card.url) return
+
+      const url = `/pages/consult/expert-webview?url=${encodeURIComponent(card.url)}&name=${encodeURIComponent(card.name || '专家咨询')}`
+      uni.navigateTo({
+        url,
+        fail: () => {
+          uni.setClipboardData({
+            data: card.url,
+            success: () => {
+              uni.showToast({ title: '链接已复制', icon: 'none' })
+            }
+          })
+        }
+      })
     },
     handleBack() {
       if (this.backUrl) {
@@ -847,6 +936,67 @@ export default {
 .rich-content {
   font-size: 28rpx;
   line-height: 1.7;
+}
+
+.expert-card {
+  margin-top: 16rpx;
+  padding: 20rpx;
+  border: 1rpx solid #bfdbfe;
+  border-radius: 20rpx;
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  box-shadow: 0 8rpx 20rpx rgba(37, 99, 235, 0.1);
+}
+
+.expert-card-icon {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 18rpx;
+  background: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.expert-card-icon-text {
+  font-size: 28rpx;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.expert-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.expert-card-name {
+  font-size: 28rpx;
+  font-weight: 800;
+  color: #1e3a8a;
+  line-height: 1.35;
+}
+
+.expert-card-subtitle {
+  margin-top: 6rpx;
+  font-size: 23rpx;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.expert-card-action {
+  width: 42rpx;
+  height: 42rpx;
+  border-radius: 50%;
+  background: #dbeafe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .input-area {
