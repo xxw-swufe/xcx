@@ -224,9 +224,23 @@ export default {
         return
       }
 
+      if (this.uploadedFiles.length > 0) {
+        // 将已上传的文件列表通过事件总线发送回聊天页面
+        uni.$emit('upload-files-completed', this.uploadedFiles.map(file => ({
+          id: `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          type: file.isImage ? 'image' : 'file',
+          title: file.name,
+          subtitle: '已上传',
+          fileUrl: file.fileUrl,
+          fileID: file.fileID,
+          fileSize: 0 // 可以在 addAndUploadFile 中记录原始大小
+        })))
+      }
+
+      uni.showToast({ title: '已同步至聊天', icon: 'success' })
       setTimeout(() => {
         uni.navigateBack()
-      }, 500)
+      }, 800)
     }
   }
 }

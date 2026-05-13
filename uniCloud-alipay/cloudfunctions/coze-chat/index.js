@@ -6,7 +6,7 @@ const dbCmd = db.command;
 const DEFAULT_COZE_API_BASE = 'https://api.coze.cn';
 const DEFAULT_COZE_BOT_ID = '7619186763315249193';
 const DEFAULT_COZE_TOKEN = 'sat_hBYTVDXcBXZEj30zDcCNwEZ4S6cGetB4uYvhupH2wefPDfcSZ8GtETvAdxMz7ZCh';
-const COZE_TIMEOUT = [60000, 60000];
+const COZE_TIMEOUT = [300000, 300000];
 const BOT_ID_MAP = {
   general: process.env.COZE_BOT_ID_GENERAL || process.env.COZE_BOT_ID || DEFAULT_COZE_BOT_ID,
   letter: process.env.COZE_BOT_ID_LETTER || '7633245375314329600',
@@ -67,23 +67,25 @@ function safeJsonParse(value) {
 }
 
 function normalizeText(value) {
-  if (!value) return '';
+  if (value == null) return '';
   if (typeof value === 'string') {
     const parsed = safeJsonParse(value);
     if (parsed !== value) return normalizeText(parsed);
     return value;
+  }
+  if (Array.isArray(value)) {
+    let result = '';
+    for (const item of value) {
+      const text = normalizeText(item);
+      if (text) result += text;
+    }
+    return result;
   }
   if (typeof value.text === 'string') return value.text;
   if (typeof value.content === 'string') return value.content;
   if (typeof value.output === 'string') return value.output;
   if (value.message) return normalizeText(value.message);
   if (value.data) return normalizeText(value.data);
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const text = normalizeText(item);
-      if (text) return text;
-    }
-  }
   return '';
 }
 
@@ -91,6 +93,8 @@ function parseSseReply(text) {
   const blocks = String(text || '').split(/\r?\n\r?\n/);
   let reply = '';
   let conversationId = '';
+
+  console.log('[coze-chat] parseSseReply blocks count:', blocks.length);
 
   for (const block of blocks) {
     const lines = block
@@ -107,7 +111,7 @@ function parseSseReply(text) {
 
     try {
       const event = JSON.parse(payloadText);
-      const data = event.data || {};
+      const data = event.data || event; // 兼容直接在 root 的情况
       const messageType = event.type || data.type || '';
       const role = event.role || data.role || '';
       const content = event.content ?? data.content;
@@ -121,26 +125,48 @@ function parseSseReply(text) {
           '';
       }
 
+      // 1. 处理消息增量 (delta)
+      if (eventName === 'conversation.message.delta') {
+        const deltaText = normalizeText(content);
+        if (deltaText) reply += deltaText;
+        continue;
+      }
+
+      // 2. 处理消息完成 (message.completed)
+      if (eventName === 'conversation.message.completed') {
+        if (role === 'assistant' && messageType === 'answer') {
+          const fullText = normalizeText(content);
+          if (fullText) reply = fullText; 
+        }
+        continue;
+      }
+
+      // 3. 处理对话完成 (chat.completed) - 此时可以结束解析
+      if (eventName === 'conversation.chat.completed') {
+        const status = data.status;
+        if (status === 'completed') {
+          // 对话成功完成
+        } else if (status === 'requires_action') {
+          reply = 'Bot 需要调用工具，但当前环境未配置工具回调。请检查 Bot 配置，关闭不需要的插件或工作流。';
+        } else if (status === 'failed') {
+          const lastError = data.last_error || {};
+          reply = `对话失败：${lastError.msg || '未知错误'}`;
+        }
+        break; // 收到 chat.completed 就可以提前跳出循环了
+      }
+
+      // 3. 兼容旧逻辑或其他事件
       if (messageType === 'answer' && role === 'assistant') {
-        const textReply = normalizeText(content) || normalizeText(event.message?.content) || normalizeText(event.output);
-        if (textReply) reply = textReply;
-        continue;
-      }
-
-      if (messageType === 'verbose') {
-        continue;
-      }
-
-      if (eventName === 'conversation.message.completed' && role === 'assistant' && messageType !== 'verbose') {
-        const textReply = normalizeText(content) || normalizeText(event.message?.content) || normalizeText(event.output);
+        const textReply = normalizeText(content);
         if (textReply) reply = textReply;
       }
     } catch (err) {
+      console.error('[coze-chat] parse block error:', err, payloadText);
       continue;
     }
   }
 
-  return { reply, conversationId };
+  return { reply: reply.trim(), conversationId };
 }
 
 function cozeRequest({ token, url, method = 'GET', data, dataType = 'text' }) {
@@ -157,10 +183,30 @@ function cozeRequest({ token, url, method = 'GET', data, dataType = 'text' }) {
   });
 }
 
-async function callCozeChat({ token, botId, apiBase, userId, content, conversationId = '' }) {
-  const url = conversationId
-    ? `${apiBase}/v3/chat?conversation_id=${encodeURIComponent(conversationId)}`
-    : `${apiBase}/v3/chat`;
+async function callCozeChat({ token, botId, apiBase, userId, content, conversationId = '', history = [] }) {
+  const url = `${apiBase}/v3/chat`;
+
+  console.log('[coze-chat] Requesting Coze V3:', {
+    url,
+    botId,
+    userId,
+    hasConversationId: !!conversationId,
+    historyCount: history.length
+  });
+
+  // 构建消息数组：历史上下文 + 当前消息
+  const messages = [
+    ...history.map(m => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: String(m.content),
+      content_type: 'text'
+    })),
+    {
+      content: String(content),
+      content_type: 'text',
+      role: 'user'
+    }
+  ];
 
   const res = await cozeRequest({
     token,
@@ -171,34 +217,36 @@ async function callCozeChat({ token, botId, apiBase, userId, content, conversati
       bot_id: botId,
       user_id: String(userId),
       stream: true,
-      auto_save_history: true,
-      additional_messages: [
-        {
-          content,
-          content_type: 'text',
-          role: 'user',
-          type: 'question'
-        }
-      ],
-      parameters: {}
+      auto_save_history: true, // 开启自动保存，确保 Coze 侧也能维护状态
+      conversation_id: conversationId || undefined,
+      additional_messages: messages
     }
   });
 
   const traceInfo = getTraceInfo(res);
   const rawText = String(res.data || '');
-  const hasSsePayload = rawText.includes('event:') && rawText.includes('data:');
-
-  console.log('[coze-chat] chat created', {
-    statusCode: traceInfo.statusCode,
-    traceInfo,
-    preview: rawText.slice(0, 800)
-  });
-
-  if (!hasSsePayload && (traceInfo.statusCode < 200 || traceInfo.statusCode >= 300)) {
-    throw new Error(`Coze create chat failed: ${traceInfo.statusCode} ${rawText}`);
+  
+  // 如果返回的是 JSON 错误（非 SSE）
+  if (!rawText.includes('event:') && !rawText.includes('data:')) {
+    try {
+      const jsonRes = JSON.parse(rawText);
+      if (jsonRes.code !== 0) {
+        throw new Error(`Coze API Error: ${jsonRes.msg || jsonRes.message} (Code: ${jsonRes.code})`);
+      }
+    } catch (e) {
+      if (traceInfo.statusCode !== 200) {
+        throw new Error(`Coze HTTP Error: ${traceInfo.statusCode} - ${rawText.slice(0, 100)}`);
+      }
+    }
   }
 
   const parsed = parseSseReply(rawText);
+  
+  if (!parsed.reply) {
+    console.error('[coze-chat] Parse failed, raw response preview:', rawText.slice(0, 500));
+    throw new Error('未能解析到 AI 回复，请检查 Bot 是否已发布到 API 渠道');
+  }
+
   return {
     reply: parsed.reply,
     conversationId: parsed.conversationId || conversationId,
@@ -215,9 +263,24 @@ async function getOrCreateSession(userId, sessionId, content, scene) {
     const session = (sessionDoc.data && sessionDoc.data[0]) || null;
     if (!session) return fail('session not found', 404);
     if (session.user_id !== userId) return fail('session does not belong to current user', 403);
+    
+    // 增加场景校验：如果会话 ID 对应的场景与当前场景不符，则视为无效会话 ID，强制创建新会话
+    if (session.scene !== scene) {
+      console.warn('[coze-chat] session scene mismatch, creating new session', {
+        sessionId,
+        expectedScene: scene,
+        actualScene: session.scene
+      });
+      return createNewSession(userId, content, scene, currentTime);
+    }
+    
     return { currentSessionId: sessionId, currentTime, session };
   }
 
+  return createNewSession(userId, content, scene, currentTime);
+}
+
+async function createNewSession(userId, content, scene, currentTime) {
   const sessionResult = await db.collection('chat_sessions').add({
     user_id: userId,
     title: (content || '新会话').slice(0, 20),
@@ -233,7 +296,7 @@ async function getOrCreateSession(userId, sessionId, content, scene) {
 }
 
 async function sendMessage(event) {
-  const { sessionId, content, scene = 'general' } = event;
+  const { sessionId, content, scene = 'general', quote } = event;
   const attachments = Array.isArray(event.attachments) ? event.attachments : [];
   const userId = getRequesterUid(event);
 
@@ -246,7 +309,7 @@ async function sendMessage(event) {
     sessionId: sessionId || '',
     scene,
     contentLength: String(content).length,
-    attachmentCount: attachments.length
+    hasQuote: !!quote
   });
 
   const sessionResult = await getOrCreateSession(userId, sessionId, content, scene);
@@ -254,6 +317,7 @@ async function sendMessage(event) {
 
   const { currentSessionId, currentTime, session } = sessionResult;
 
+  // 1. 存储到数据库的是纯净内容，不包含引用提示词
   await db.collection('chat_messages').add({
     session_id: currentSessionId,
     user_id: userId,
@@ -261,6 +325,7 @@ async function sendMessage(event) {
     role: 'user',
     content,
     content_type: 'text',
+    quote: quote || null, // 存储引用对象供 UI 渲染
     raw_response: attachments.length ? { attachments } : {},
     created_at: currentTime
   });
@@ -269,6 +334,22 @@ async function sendMessage(event) {
   const botId = getBotId(scene);
   const oldConversationId = session && session.coze_conversation_id ? session.coze_conversation_id : '';
 
+  // 1.5 获取最近的历史消息作为显式上下文 (取最近10条)
+  const historyRes = await db.collection('chat_messages')
+    .where({ session_id: currentSessionId })
+    .orderBy('created_at', 'desc')
+    .limit(10)
+    .get();
+  
+  // 逆序排列，保证时间线正确：[旧, ..., 新]
+  const history = (historyRes.data || []).reverse();
+
+  // 2. 仅在调用 Coze API 时，构建包含上下文的提示词
+  let apiContent = content;
+  if (quote && typeof quote.content === 'string' && quote.content.trim()) {
+    apiContent = `[CONTEXT: User is quoting a previous message]:\n"${quote.content.trim()}"\n\n[USER REPLY]:\n${content}`;
+  }
+
   let cozeResult;
   try {
     cozeResult = await callCozeChat({
@@ -276,8 +357,9 @@ async function sendMessage(event) {
       botId,
       apiBase,
       userId,
-      content,
-      conversationId: oldConversationId
+      content: apiContent, // 发送带上下文的内容
+      conversationId: oldConversationId,
+      history // 传入历史记录
     });
   } catch (err) {
     const errorText = err && err.message ? err.message : 'unknown';
@@ -399,6 +481,75 @@ async function getSessions(event) {
   return success({ list: result.data });
 }
 
+async function deleteSession(event) {
+  const { sessionId } = event;
+  const userId = getRequesterUid(event);
+
+  if (!userId || !sessionId) {
+    return fail('login required or sessionId is required', 401);
+  }
+
+  // 软删除，标记状态为 deleted，同时增加 userId 校验
+  const result = await db.collection('chat_sessions').where({
+    _id: sessionId,
+    user_id: userId
+  }).update({
+    status: 'deleted',
+    updated_at: now()
+  });
+
+  if (result.updated === 0) {
+    return fail('session not found or permission denied', 403);
+  }
+
+  return success({ message: 'session deleted' });
+}
+
+async function updateSession(event) {
+  const { sessionId, title } = event;
+  const userId = getRequesterUid(event);
+
+  if (!userId || !sessionId) {
+    return fail('login required or sessionId is required', 401);
+  }
+
+  // 增加 userId 校验
+  const result = await db.collection('chat_sessions').where({
+    _id: sessionId,
+    user_id: userId
+  }).update({
+    title: String(title).slice(0, 50),
+    updated_at: now()
+  });
+
+  if (result.updated === 0) {
+    return fail('session not found or permission denied', 403);
+  }
+
+  return success({ message: 'session updated' });
+}
+
+async function deleteMessage(event) {
+  const { messageId } = event;
+  const userId = getRequesterUid(event);
+
+  if (!userId || !messageId) {
+    return fail('login required or messageId is required', 401);
+  }
+
+  // 物理删除该条消息，增加 userId 校验
+  const result = await db.collection('chat_messages').where({
+    _id: messageId,
+    user_id: userId
+  }).remove();
+
+  if (result.deleted === 0) {
+    return fail('message not found or permission denied', 403);
+  }
+
+  return success({ message: 'message deleted' });
+}
+
 exports.main = async (event) => {
   const { action } = event;
 
@@ -409,6 +560,12 @@ exports.main = async (event) => {
       return getHistory(event);
     case 'getSessions':
       return getSessions(event);
+    case 'deleteSession':
+      return deleteSession(event);
+    case 'updateSession':
+      return updateSession(event);
+    case 'deleteMessage':
+      return deleteMessage(event);
     default:
       return fail(`Unknown action: ${action}`, 404);
   }
