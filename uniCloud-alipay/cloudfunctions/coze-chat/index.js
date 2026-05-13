@@ -183,30 +183,15 @@ function cozeRequest({ token, url, method = 'GET', data, dataType = 'text' }) {
   });
 }
 
-async function callCozeChat({ token, botId, apiBase, userId, content, conversationId = '', history = [] }) {
+async function callCozeChat({ token, botId, apiBase, userId, content, conversationId = '' }) {
   const url = `${apiBase}/v3/chat`;
 
   console.log('[coze-chat] Requesting Coze V3:', {
     url,
     botId,
     userId,
-    hasConversationId: !!conversationId,
-    historyCount: history.length
+    hasConversationId: !!conversationId
   });
-
-  // 构建消息数组：历史上下文 + 当前消息
-  const messages = [
-    ...history.map(m => ({
-      role: m.role === 'assistant' ? 'assistant' : 'user',
-      content: String(m.content),
-      content_type: 'text'
-    })),
-    {
-      content: String(content),
-      content_type: 'text',
-      role: 'user'
-    }
-  ];
 
   const res = await cozeRequest({
     token,
@@ -217,9 +202,15 @@ async function callCozeChat({ token, botId, apiBase, userId, content, conversati
       bot_id: botId,
       user_id: String(userId),
       stream: true,
-      auto_save_history: true, // 开启自动保存，确保 Coze 侧也能维护状态
+      auto_save_history: true,
       conversation_id: conversationId || undefined,
-      additional_messages: messages
+      additional_messages: [
+        {
+          content: String(content),
+          content_type: 'text',
+          role: 'user'
+        }
+      ]
     }
   });
 
@@ -317,37 +308,28 @@ async function sendMessage(event) {
 
   const { currentSessionId, currentTime, session } = sessionResult;
 
-  // 1. 存储到数据库的是纯净内容，不包含引用提示词
+  // 1. 存储用户消息到数据库
   await db.collection('chat_messages').add({
     session_id: currentSessionId,
     user_id: userId,
     scene,
     role: 'user',
-    content,
+    content: content,
     content_type: 'text',
-    quote: quote || null, // 存储引用对象供 UI 渲染
-    raw_response: attachments.length ? { attachments } : {},
-    created_at: currentTime
+    attachments,
+    quote: quote || null,
+    created_at: now()
   });
 
+  // 2. 获取 Coze 配置
   const { token, apiBase } = getCozeConfig();
   const botId = getBotId(scene);
   const oldConversationId = session && session.coze_conversation_id ? session.coze_conversation_id : '';
 
-  // 1.5 获取最近的历史消息作为显式上下文 (取最近10条)
-  const historyRes = await db.collection('chat_messages')
-    .where({ session_id: currentSessionId })
-    .orderBy('created_at', 'desc')
-    .limit(10)
-    .get();
-  
-  // 逆序排列，保证时间线正确：[旧, ..., 新]
-  const history = (historyRes.data || []).reverse();
-
-  // 2. 仅在调用 Coze API 时，构建包含上下文的提示词
+  // 3. 构建包含上下文的提示词 (如果存在引用)
   let apiContent = content;
   if (quote && typeof quote.content === 'string' && quote.content.trim()) {
-    apiContent = `[CONTEXT: User is quoting a previous message]:\n"${quote.content.trim()}"\n\n[USER REPLY]:\n${content}`;
+    apiContent = `[CONTEXT: 用户引用了之前的消息]:\n"${quote.content.trim()}"\n\n[USER REPLY]:\n${content}`;
   }
 
   let cozeResult;
@@ -357,13 +339,12 @@ async function sendMessage(event) {
       botId,
       apiBase,
       userId,
-      content: apiContent, // 发送带上下文的内容
-      conversationId: oldConversationId,
-      history // 传入历史记录
+      content: apiContent,
+      conversationId: oldConversationId
     });
   } catch (err) {
-    const errorText = err && err.message ? err.message : 'unknown';
-    const fallbackReply = `Coze 调用失败：${errorText}`;
+    const errorText = err.message || String(err);
+    const fallbackReply = `抱歉，连接 AI 助手出错：${errorText}`;
 
     console.log('[coze-chat] sendMessage failed', {
       userId: String(userId),
@@ -378,7 +359,7 @@ async function sendMessage(event) {
       role: 'assistant',
       content: fallbackReply,
       content_type: 'text',
-      raw_response: { provider: 'coze', mocked: false, error: errorText },
+      raw_response: { provider: 'coze', error: errorText },
       created_at: now()
     });
 
@@ -391,7 +372,6 @@ async function sendMessage(event) {
     return success({
       sessionId: currentSessionId,
       reply: fallbackReply,
-      mocked: false,
       error: errorText
     });
   }
@@ -402,8 +382,7 @@ async function sendMessage(event) {
     userId: String(userId),
     sessionId: currentSessionId,
     replyLength: reply.length,
-    conversationId: cozeResult.conversationId || '',
-    status: cozeResult.status || ''
+    conversationId: cozeResult.conversationId || ''
   });
 
   await db.collection('chat_messages').add({
@@ -415,7 +394,6 @@ async function sendMessage(event) {
     content_type: 'text',
     raw_response: {
       provider: 'coze',
-      mocked: false,
       conversationId: cozeResult.conversationId || ''
     },
     created_at: now()
@@ -436,7 +414,6 @@ async function sendMessage(event) {
   return success({
     sessionId: currentSessionId,
     reply,
-    mocked: false,
     conversationId: cozeResult.conversationId || ''
   });
 }

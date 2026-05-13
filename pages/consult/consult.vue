@@ -149,7 +149,7 @@
             </view>
             <view v-if="msg.role === 'assistant'" class="msg-op-bar">
               <view class="op-btn" @click.stop="handleCopy(msg)">
-                <uni-icons type="chatboxes" size="20" color="#1e3a8a" />
+                <uni-icons type="images" size="18" color="#3b82f6" />
               </view>
             </view>
             <view v-if="msg.role === 'user'" class="msg-bubble bubble-user" @longpress="copyMessage(msg)">
@@ -162,7 +162,12 @@
               </template>
               <template v-else-if="msg.type === 'audio'">
                 <view class="audio-card">
-                  <uni-icons type="mic" size="18" color="#1e3a8a" />
+                  <view class="voice-wave-icon">
+                    <view class="wave-bar bar-1" style="background-color: #1e3a8a;"></view>
+                    <view class="wave-bar bar-2" style="background-color: #1e3a8a;"></view>
+                    <view class="wave-bar bar-3" style="background-color: #1e3a8a;"></view>
+                    <view class="wave-bar bar-4" style="background-color: #1e3a8a;"></view>
+                  </view>
                   <view class="audio-info">
                     <text class="msg-text" selectable="true">{{ msg.content }}</text>
                     <text class="file-note">{{ msg.extra || '' }}</text>
@@ -182,7 +187,7 @@
             </view>
             <view v-if="msg.role === 'user'" class="msg-op-bar">
               <view class="op-btn" @click.stop="handleCopy(msg)">
-                <uni-icons type="chatboxes" size="20" color="#1e3a8a" />
+                <uni-icons type="images" size="18" color="#3b82f6" />
               </view>
             </view>
           </view>
@@ -215,7 +220,12 @@
             <image class="pending-image" :src="item.filePath" mode="aspectFill" />
           </view>
           <view class="pending-preview pending-audio" v-else-if="item.type === 'audio'">
-            <uni-icons type="mic" size="18" color="#1e3a8a" />
+            <view class="voice-wave-icon">
+              <view class="wave-bar bar-1" style="background-color: #1e3a8a;"></view>
+              <view class="wave-bar bar-2" style="background-color: #1e3a8a;"></view>
+              <view class="wave-bar bar-3" style="background-color: #1e3a8a;"></view>
+              <view class="wave-bar bar-4" style="background-color: #1e3a8a;"></view>
+            </view>
           </view>
           <view class="pending-preview pending-file" v-else-if="item.type === 'file'">
             <uni-icons type="paperclip" size="18" color="#1e3a8a" />
@@ -235,8 +245,13 @@
           <uni-icons type="camera" size="20" color="#6b7280" />
         </view>
         <view class="quick-btn" @click="handleAction('voice')">
-          <uni-icons type="mic" size="20" color="#6b7280" />
-        </view>
+            <view class="voice-wave-icon">
+              <view class="wave-bar bar-1"></view>
+              <view class="wave-bar bar-2"></view>
+              <view class="wave-bar bar-3"></view>
+              <view class="wave-bar bar-4"></view>
+            </view>
+          </view>
         <view class="quick-btn" @click="handleAction('link')">
           <uni-icons type="link" size="20" color="#6b7280" />
         </view>
@@ -250,7 +265,12 @@
 
       <view class="input-row">
         <view class="voice-btn" @touchstart="startVoiceInput" @touchend="stopVoiceInput">
-          <uni-icons type="mic" size="22" :color="isRecording ? '#2563eb' : '#6b7280'" />
+          <view class="voice-wave-icon" :class="{ active: isRecording }">
+            <view class="wave-bar bar-1"></view>
+            <view class="wave-bar bar-2"></view>
+            <view class="wave-bar bar-3"></view>
+            <view class="wave-bar bar-4"></view>
+          </view>
         </view>
         <input
           class="chat-input"
@@ -1950,9 +1970,6 @@ export default {
   color: #334155;
   font-size: 26rpx;
   font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .msg-op-bar {
@@ -1962,21 +1979,21 @@ export default {
 }
 
 .op-btn {
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 14rpx;
-  background: #f8fafc;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 12rpx;
+  background: #f1f5f9;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
-  border: 1rpx solid #e2e8f0;
+  box-shadow: 0 4rpx 10rpx rgba(0, 0, 0, 0.08);
+  border: 1rpx solid #cbd5e1;
   transition: all 0.2s;
   
   &:active {
     transform: scale(0.9);
-    background: #eef4ff;
-    border-color: #dbeafe;
+    background: #e0e7ff;
+    border-color: #3b82f6;
   }
 }
 
@@ -2221,6 +2238,32 @@ export default {
     transform: scale(0.9);
   }
 }
+
+/* 自定义竖立声波图标 */
+.voice-wave-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  height: 32rpx;
+  width: 32rpx;
+}
+
+.wave-bar {
+  width: 4rpx;
+  background-color: #6b7280;
+  border-radius: 2rpx;
+  transition: all 0.2s;
+}
+
+.voice-wave-icon.active .wave-bar {
+  background-color: #2563eb;
+}
+
+.bar-1 { height: 12rpx; }
+.bar-2 { height: 24rpx; }
+.bar-3 { height: 18rpx; }
+.bar-4 { height: 14rpx; }
 
 .chat-input {
   flex: 1;

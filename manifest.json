@@ -122,12 +122,7 @@
                       "usingComponents":  true,
                       "unipush":  {
                                       "enable":  false
-                                  },
-                      "permission":  {
-                                         "scope.userLocation":  {
-                                                                    "desc":  "用于定位附近部门和政策信息"
-                                                                }
-                                     }
+                                  }
                   },
     "mp-alipay":  {
                       "usingComponents":  true
