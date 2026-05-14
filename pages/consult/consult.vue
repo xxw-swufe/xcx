@@ -103,6 +103,28 @@
       />
     </uni-popup>
 
+    <!-- 选择复制弹窗 -->
+    <uni-popup ref="selectionCopyPopup" type="bottom">
+      <view class="selection-copy-panel">
+        <view class="selection-copy-header">
+          <view>
+            <text class="selection-copy-title">选择复制</text>
+            <text class="selection-copy-subtitle">长按正文选择需要的片段</text>
+          </view>
+          <view class="selection-copy-close" @click="closeSelectionCopy">
+            <uni-icons type="closeempty" size="20" color="#64748b" />
+          </view>
+        </view>
+        <scroll-view class="selection-copy-body" scroll-y>
+          <text class="selection-copy-text" selectable="true" user-select="true">{{ selectionCopyText }}</text>
+        </scroll-view>
+        <view class="selection-copy-actions">
+          <view class="selection-copy-btn ghost" @click="copySelectionAll">复制全文</view>
+          <view class="selection-copy-btn primary" @click="closeSelectionCopy">完成</view>
+        </view>
+      </view>
+    </uni-popup>
+
     <scroll-view class="chat-area" scroll-y :scroll-top="scrollTop" :scroll-with-animation="true">
       <view class="chat-list">
         <view
@@ -115,7 +137,12 @@
             <image class="avatar-img" src="/static/brand-icon.png" mode="aspectFit" />
           </view>
           <view class="msg-body">
-            <view v-if="msg.role === 'assistant'" class="msg-bubble bubble-ai" @longpress="copyMessage(msg)">
+            <view
+              v-if="msg.role === 'assistant'"
+              class="msg-bubble bubble-ai"
+              :class="{ 'has-table': msg.hasTable }"
+              @longpress="copyMessage(msg)"
+            >
               <view v-if="msg.quote" class="quote-content" @click="scrollToMessage(msg.quote.id)">
                 <text class="quote-text" selectable="true">「 {{ msg.quote.content }} 」</text>
               </view>
@@ -348,6 +375,7 @@ export default {
       sessionKeyword: '',
       currentRenamingSession: null,
       currentRenamingTitle: '',
+      selectionCopyText: '',
       quoteMessage: null,
       isRecording: false,
       recorderManager: null,
@@ -485,33 +513,110 @@ export default {
     },
     formatMarkdownInline(text) {
       if (!text) return ''
-      let result = this.escapeHtml(text)
+      const codeSpans = []
+      let result = String(text || '').replace(/`([^`]+)`/g, (match, code) => {
+        const token = `@@CODE_SPAN_${codeSpans.length}@@`
+        codeSpans.push(`<code style="padding:2rpx 8rpx;border-radius:8rpx;background:#f1f5f9;color:#0f172a;font-family:monospace;font-size:24rpx;margin:0 4rpx;">${this.escapeHtml(code)}</code>`)
+        return token
+      })
 
-      // 1. 行内代码
-      result = result.replace(/`([^`]+)`/g, '<code style="padding:2rpx 8rpx;border-radius:8rpx;background:#f1f5f9;color:#0f172a;font-family:monospace;font-size:24rpx;margin:0 4rpx;">$1</code>')
+      result = this.escapeHtml(result)
 
-      // 2. 粗体 + 斜体 (***)
-      result = result.replace(/\*\*\*(.+?)\*\*\*/g, '<strong style="font-weight:700;font-style:italic;color:#0f172a;">$1</strong>')
-      result = result.replace(/___(.+?)___/g, '<strong style="font-weight:700;font-style:italic;color:#0f172a;">$1</strong>')
+      result = result.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/gi, (match, label) => {
+        return `<span style="color:#2563eb;text-decoration:underline;word-break:break-all;">${this.formatMarkdownInline(label)}</span>`
+      })
+      result = result.replace(/(https?:\/\/[^\s<]+)/gi, '<span style="color:#2563eb;text-decoration:underline;word-break:break-all;">$1</span>')
+      result = result.replace(/\*\*\*([\s\S]+?)\*\*\*/g, '<strong style="font-weight:700;font-style:italic;color:#0f172a;">$1</strong>')
+      result = result.replace(/___([\s\S]+?)___/g, '<strong style="font-weight:700;font-style:italic;color:#0f172a;">$1</strong>')
+      result = result.replace(/\*\*([\s\S]+?)\*\*/g, '<strong style="font-weight:700;color:#0f172a;">$1</strong>')
+      result = result.replace(/__([\s\S]+?)__/g, '<strong style="font-weight:700;color:#0f172a;">$1</strong>')
+      result = result.replace(/~~([\s\S]+?)~~/g, '<del style="text-decoration:line-through;color:#94a3b8;">$1</del>')
+      result = result.replace(/(^|[\s([{（【])\*([^*\n]+?)\*($|[\s)\]}）】.,，。!?！？:：;；])/g, '$1<em style="font-style:italic;color:#1e293b;">$2</em>$3')
+      result = result.replace(/(^|[\s([{（【])_([^_\n]+?)_($|[\s)\]}）】.,，。!?！？:：;；])/g, '$1<em style="font-style:italic;color:#1e293b;">$2</em>$3')
 
-      // 3. 粗体 (**)
-      result = result.replace(/\*\*(.+?)\*\*/g, '<strong style="font-weight:700;color:#0f172a;">$1</strong>')
-      result = result.replace(/__(.+?)__/g, '<strong style="font-weight:700;color:#0f172a;">$1</strong>')
-
-      // 4. 斜体 (*)
-      result = result.replace(/\*(.+?)\*/g, '<em style="font-style:italic;color:#1e293b;">$1</em>')
-      result = result.replace(/_(.+?)_/g, '<em style="font-style:italic;color:#1e293b;">$1</em>')
-
-      // 5. 删除线 (~~)
-      result = result.replace(/~~(.+?)~~/g, '<del style="text-decoration:line-through;color:#94a3b8;">$1</del>')
-
-      // 6. 链接 [text](url)
-      result = result.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/gi, '<span style="color:#2563eb;text-decoration:underline;word-break:break-all;">$1</span>')
+      codeSpans.forEach((html, index) => {
+        result = result.replace(`@@CODE_SPAN_${index}@@`, html)
+      })
 
       return result
     },
+    normalizeMarkdownSource(text) {
+      return String(text || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/([^\n|]\|)\s*\|\s*((?::?-{3,}:?\s*\|)+)/g, '$1\n| $2')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    },
+    splitMarkdownTableRow(line) {
+      let source = String(line || '').trim()
+      if (source.startsWith('|')) source = source.slice(1)
+      if (source.endsWith('|')) source = source.slice(0, -1)
+
+      const cells = []
+      let cell = ''
+      for (let index = 0; index < source.length; index += 1) {
+        const char = source[index]
+        if (char === '\\' && source[index + 1] === '|') {
+          cell += '|'
+          index += 1
+          continue
+        }
+        if (char === '|') {
+          cells.push(cell.trim())
+          cell = ''
+          continue
+        }
+        cell += char
+      }
+      cells.push(cell.trim())
+      return cells
+    },
+    isMarkdownTableSeparator(line) {
+      const cells = this.splitMarkdownTableRow(line)
+      return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s/g, '')))
+    },
+    isMarkdownTableStart(lines, index) {
+      if (index + 1 >= lines.length) return false
+      const header = String(lines[index] || '').trim()
+      if (!header.includes('|')) return false
+      const cells = this.splitMarkdownTableRow(header)
+      return cells.length > 1 && this.isMarkdownTableSeparator(lines[index + 1])
+    },
+    getMarkdownTableAlign(separatorCell) {
+      const value = String(separatorCell || '').replace(/\s/g, '')
+      if (value.startsWith(':') && value.endsWith(':')) return 'center'
+      if (value.endsWith(':')) return 'right'
+      return 'left'
+    },
+    renderMarkdownTable(tableLines) {
+      const headers = this.splitMarkdownTableRow(tableLines[0])
+      const separators = this.splitMarkdownTableRow(tableLines[1])
+      const aligns = headers.map((_, index) => this.getMarkdownTableAlign(separators[index] || '---'))
+      const rows = tableLines.slice(2).map((line) => this.splitMarkdownTableRow(line))
+      const columnCount = headers.length
+
+      const tableMinWidth = Math.max(620, columnCount * 190)
+      const cellBase = 'padding:16rpx 18rpx;border:2rpx solid #94a3b8;vertical-align:top;word-break:break-word;min-width:170rpx;'
+      const headerHtml = headers.map((cell, index) => {
+        const align = aligns[index]
+        return `<th style="${cellBase}background:#dbeafe;color:#0f172a;font-weight:900;text-align:${align};">${this.formatMarkdownInline(cell)}</th>`
+      }).join('')
+
+      const bodyHtml = rows.map((row, rowIndex) => {
+        const cells = []
+        for (let index = 0; index < columnCount; index += 1) {
+          const align = aligns[index]
+          const bg = rowIndex % 2 === 0 ? '#ffffff' : '#f1f5f9'
+          cells.push(`<td style="${cellBase}background:${bg};color:#1e293b;text-align:${align};font-weight:500;">${this.formatMarkdownInline(row[index] || '')}</td>`)
+        }
+        return `<tr>${cells.join('')}</tr>`
+      }).join('')
+
+      return `<div style="margin:20rpx 0;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="border-collapse:collapse;border-spacing:0;min-width:${tableMinWidth}rpx;width:max-content;font-size:24rpx;line-height:1.55;border:2rpx solid #64748b;"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div>`
+    },
     markdownToHtml(text) {
-      const source = String(text || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+      const source = this.normalizeMarkdownSource(text)
       if (!source) return ''
 
       const lines = source.split('\n')
@@ -527,7 +632,6 @@ export default {
           continue
         }
 
-        // 1. 代码块 - 使用最稳妥的 pre 标签，并强制背景色
         if (trimmed.startsWith('```')) {
           i++
           const codeLines = []
@@ -535,13 +639,12 @@ export default {
             codeLines.push(lines[i])
             i++
           }
-          i++
+          if (i < lines.length) i++
           const codeText = this.escapeHtml(codeLines.join('\n'))
           blocks.push(`<div style="margin:12rpx 0;padding:20rpx;border-radius:12rpx;background:#1e293b;color:#f8fafc;font-size:24rpx;line-height:1.5;overflow-x:auto;"><pre style="white-space:pre;word-break:normal;margin:0;"><code style="font-family:monospace;">${codeText}</code></pre></div>`)
           continue
         }
 
-        // 2. 标题 - 统一使用 div 模拟，避免默认 margin 干扰
         const headerMatch = trimmed.match(/^(#{1,6})\s+(.*)$/)
         if (headerMatch) {
           const level = headerMatch[1].length
@@ -551,10 +654,20 @@ export default {
           continue
         }
 
-        // 3. 引用 - 使用 div 模拟，border 更稳定
+        if (this.isMarkdownTableStart(lines, i)) {
+          const tableLines = [lines[i], lines[i + 1]]
+          i += 2
+          while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+            tableLines.push(lines[i])
+            i++
+          }
+          blocks.push(this.renderMarkdownTable(tableLines))
+          continue
+        }
+
         if (trimmed.startsWith('>')) {
           const quoteLines = []
-          while (i < lines.length && (lines[i].trim().startsWith('>') || (lines[i].trim() && !lines[i-1]?.trim().endsWith('  ')))) {
+          while (i < lines.length && lines[i].trim().startsWith('>')) {
              if (lines[i].trim().startsWith('>')) {
                quoteLines.push(lines[i].trim().replace(/^>\s*/, ''))
              } else {
@@ -566,7 +679,6 @@ export default {
           continue
         }
 
-        // 4. 列表 - 核心修复：彻底解决缩进问题
         const listMatch = trimmed.match(/^([-*+]|\d+\.)\s+/)
         if (listMatch) {
           const isOrdered = /^\d/.test(listMatch[1])
@@ -585,9 +697,12 @@ export default {
             const itemMatch = currTrim.match(/^([-*+]|\d+\.)\s+(.*)$/)
             if (itemMatch) {
               const marker = isOrdered ? itemMatch[1] : '•'
+              const taskMatch = itemMatch[2].match(/^\[(x|X| )\]\s+(.*)$/)
+              const label = taskMatch ? (taskMatch[1].trim() ? '☑' : '☐') : marker
+              const content = taskMatch ? taskMatch[2] : itemMatch[2]
               items.push(`<div style="display:flex;flex-direction:row;margin-bottom:8rpx;align-items:flex-start;">
-                <div style="width:32rpx;flex-shrink:0;color:#64748b;font-weight:bold;">${marker}</div>
-                <div style="flex:1;">${this.formatMarkdownInline(itemMatch[2])}</div>
+                <div style="width:${isOrdered ? '52rpx' : '36rpx'};flex-shrink:0;color:#64748b;font-weight:bold;">${label}</div>
+                <div style="flex:1;">${this.formatMarkdownInline(content)}</div>
               </div>`)
               i++
             } else {
@@ -604,25 +719,23 @@ export default {
           continue
         }
 
-        // 5. 水平线
         if (/^([-*_])\1{2,}$/.test(trimmed)) {
           blocks.push('<div style="height:2rpx;background:#e2e8f0;margin:32rpx 0;overflow:hidden;"></div>')
           i++
           continue
         }
 
-        // 6. 段落
         const paraLines = []
         while (i < lines.length && lines[i].trim()) {
           const t = lines[i].trim()
-          if (t.startsWith('```') || t.match(/^#{1,6}\s+/) || t.match(/^([-*+]|\d+\.)\s+/) || t.startsWith('>') || /^([-*_])\1{2,}$/.test(t)) {
+          if (t.startsWith('```') || t.match(/^#{1,6}\s+/) || this.isMarkdownTableStart(lines, i) || t.match(/^([-*+]|\d+\.)\s+/) || t.startsWith('>') || /^([-*_])\1{2,}$/.test(t)) {
             break
           }
           paraLines.push(lines[i].trim())
           i++
         }
         if (paraLines.length) {
-          blocks.push(`<div style="margin-bottom:16rpx;color:#1e293b;font-size:28rpx;line-height:1.7;word-wrap:break-word;">${this.formatMarkdownInline(paraLines.join(' '))}</div>`)
+          blocks.push(`<div style="margin-bottom:16rpx;color:#1e293b;font-size:28rpx;line-height:1.7;word-wrap:break-word;">${paraLines.map((item) => this.formatMarkdownInline(item)).join('<br/>')}</div>`)
         }
       }
 
@@ -858,7 +971,8 @@ export default {
         content,
         html: displayContent ? this.defaultHtml(displayContent) : '',
         expertCard,
-        downloadLinks: downloadBlock.links
+        downloadLinks: downloadBlock.links,
+        hasTable: this.isMarkdownTableStart(this.normalizeMarkdownSource(displayContent).split('\n'), 0) || /\n\|?\s*:?-{3,}:?\s*\|/.test(this.normalizeMarkdownSource(displayContent))
       }
     },
     getCurrentUserInfo() {
@@ -1541,12 +1655,35 @@ export default {
         }
       })
     },
+    openSelectionCopy(message) {
+      const text = String(message && message.content ? message.content : '').trim()
+      if (!text) return
+
+      this.selectionCopyText = text
+      this.$nextTick(() => {
+        this.$refs.selectionCopyPopup.open()
+      })
+    },
+    closeSelectionCopy() {
+      this.$refs.selectionCopyPopup.close()
+    },
+    copySelectionAll() {
+      const text = String(this.selectionCopyText || '').trim()
+      if (!text) return
+
+      uni.setClipboardData({
+        data: text,
+        success: () => {
+          uni.showToast({ title: '全文已复制', icon: 'success' })
+        }
+      })
+    },
     copyMessage(message) {
       const text = String(message && message.content ? message.content : '').trim()
       if (!text) return
 
       uni.showActionSheet({
-        itemList: ['引用回复', '复制文字', '删除此条消息', '重新发送'],
+        itemList: ['引用回复', '选择复制', '复制全文', '删除此条消息', '重新发送'],
         success: (e) => {
           if (e.tapIndex === 0) {
             this.quoteMessage = {
@@ -1554,15 +1691,17 @@ export default {
               content: text.length > 50 ? text.slice(0, 50) + '...' : text
             }
           } else if (e.tapIndex === 1) {
+            this.openSelectionCopy(message)
+          } else if (e.tapIndex === 2) {
             uni.setClipboardData({
               data: text,
               success: () => {
                 uni.showToast({ title: '已复制', icon: 'success' })
               }
             })
-          } else if (e.tapIndex === 2) {
-            this.handleDeleteMessage(message)
           } else if (e.tapIndex === 3) {
+            this.handleDeleteMessage(message)
+          } else if (e.tapIndex === 4) {
             if (message.role === 'user') {
               this.inputText = message.content
               uni.showToast({ title: '已填入输入框', icon: 'none' })
@@ -1876,6 +2015,94 @@ export default {
   box-shadow: 0 4rpx 12rpx rgba(59, 130, 246, 0.28);
 }
 
+.selection-copy-panel {
+  background: #ffffff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 28rpx 28rpx calc(28rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.selection-copy-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #eef2f7;
+}
+
+.selection-copy-title {
+  display: block;
+  font-size: 32rpx;
+  line-height: 1.3;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.selection-copy-subtitle {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.selection-copy-close {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 16rpx;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.selection-copy-body {
+  max-height: 54vh;
+  min-height: 260rpx;
+  padding: 24rpx 4rpx;
+  box-sizing: border-box;
+}
+
+.selection-copy-text {
+  display: block;
+  color: #1e293b;
+  font-size: 28rpx;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.selection-copy-actions {
+  display: flex;
+  gap: 16rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid #eef2f7;
+}
+
+.selection-copy-btn {
+  flex: 1;
+  height: 84rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.selection-copy-btn.ghost {
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.selection-copy-btn.primary {
+  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  color: #ffffff;
+}
+
 .chat-area {
   flex: 1;
   overflow-y: auto;
@@ -1908,7 +2135,7 @@ export default {
 .msg-body {
   display: flex;
   flex-direction: column;
-  max-width: 540rpx;
+  max-width: 560rpx;
 }
 
 .msg-right .msg-body {
@@ -1943,12 +2170,18 @@ export default {
 }
 
 .msg-bubble {
-  max-width: 540rpx;
+  max-width: 560rpx;
   width: fit-content;
   min-width: 0;
   box-sizing: border-box;
   padding: 24rpx 28rpx;
   line-height: 1.7;
+}
+
+.msg-bubble.has-table {
+  width: calc(100vw - 150rpx);
+  max-width: calc(100vw - 150rpx);
+  padding: 24rpx 20rpx;
 }
 
 .bubble-ai {
