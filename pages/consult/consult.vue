@@ -146,6 +146,41 @@
               <view v-if="msg.quote" class="quote-content" @click="scrollToMessage(msg.quote.id)">
                 <text class="quote-text" selectable="true">「 {{ msg.quote.content }} 」</text>
               </view>
+              <view
+                v-if="getVisibleProcessEvents(msg).length"
+                class="process-panel"
+              >
+                <view class="process-head">
+                  <view class="process-dot"></view>
+                  <text class="process-title">智能体执行过程</text>
+                  <text class="process-count">{{ getVisibleProcessEvents(msg).length }} 步</text>
+                </view>
+                <view
+                  v-for="event in getVisibleProcessEvents(msg)"
+                  :key="event.id"
+                  class="process-item"
+                  :class="[event.status, { expandable: canExpandProcessEvent(event), expanded: event.expanded }]"
+                  @click.stop="toggleProcessEvent(msg, event)"
+                >
+                  <view class="process-line">
+                    <view class="process-status"></view>
+                    <view class="process-main">
+                      <text class="process-item-title">{{ getProcessEventTitle(event) }}</text>
+                      <text
+                        v-if="event.expanded && canExpandProcessEvent(event)"
+                        class="process-item-content"
+                        selectable="true"
+                      >{{ event.content }}</text>
+                    </view>
+                    <uni-icons
+                      v-if="canExpandProcessEvent(event)"
+                      :type="event.expanded ? 'arrowup' : 'arrowdown'"
+                      size="13"
+                      color="#94a3b8"
+                    />
+                  </view>
+                </view>
+              </view>
               <rich-text v-if="msg.html" class="rich-content" :nodes="msg.html" user-select="true" />
               <view v-if="msg.downloadLinks && msg.downloadLinks.length" class="download-links">
               <view
@@ -325,7 +360,7 @@
 </template>
 
 <script>
-import { getAiHistory, getAiSessions, sendAiMessage, deleteAiSession, updateAiSession, deleteAiMessage } from '@/utils/cloud-api'
+import { getAiHistory, getAiSessions, sendAiMessage, getAiEvents, deleteAiSession, updateAiSession, deleteAiMessage } from '@/utils/cloud-api'
 
 const DEFAULT_SESSION_KEY = 'consult-current-session-id'
 const CLEARED_SESSION_KEY_SUFFIX = '-cleared'
@@ -383,6 +418,7 @@ export default {
       uploadingAttachments: false,
       streamTimer: null,
       voiceStopTimer: null,
+      eventPollTimer: null,
       userProfile: {
         nickname: DEFAULT_NICKNAME,
         avatar: DEFAULT_AVATAR
@@ -438,6 +474,10 @@ export default {
       if (this.voiceStopTimer) {
         clearTimeout(this.voiceStopTimer)
         this.voiceStopTimer = null
+      }
+      if (this.eventPollTimer) {
+        clearInterval(this.eventPollTimer)
+        this.eventPollTimer = null
       }
     },
     loadUserProfile() {
@@ -1303,6 +1343,135 @@ export default {
         ext: this.getFileExt(item.title)
       }
     },
+    createRequestId() {
+      return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    },
+    normalizeProcessEvent(event) {
+      return {
+        id: event._id || `${event.created_at}-${event.title}`,
+        title: event.title || '智能体事件',
+        content: event.content || '',
+        type: event.event_type || '',
+        status: event.status || 'running',
+        createdAt: Number(event.created_at) || Date.now(),
+        expanded: false
+      }
+    },
+    isKnowledgeProcessEvent(event) {
+      const text = [
+        event && event.type,
+        event && event.title,
+        event && event.content
+      ].filter(Boolean).join(' ').toLowerCase()
+      return /knowledge|knowledge_recall|dataset|知识库|召回/.test(text)
+    },
+    getProcessEventTitle(event) {
+      if (this.isKnowledgeProcessEvent(event)) return '检索知识库'
+      return (event && event.title) || '智能体事件'
+    },
+    canExpandProcessEvent(event) {
+      if (!event || !event.content) return false
+      if (this.isKnowledgeProcessEvent(event)) return false
+      return true
+    },
+    isVisibleProcessEvent(event) {
+      const type = String(event && event.type || '').toLowerCase()
+      const title = String(event && event.title || '')
+      if (!event) return false
+      if (type === 'answer_delta') return false
+      if (type === 'request_started') return false
+      if (type.startsWith('conversation.chat.')) return false
+      if (/^创建 Coze 会话$|^智能体开始执行$|^执行完成$/.test(title)) return false
+      return true
+    },
+    getVisibleProcessEvents(msg) {
+      return ((msg && msg.events) || []).filter(this.isVisibleProcessEvent)
+    },
+    toggleProcessEvent(msg, event) {
+      if (!msg || !event || !this.canExpandProcessEvent(event)) return
+      event.expanded = !event.expanded
+      const index = this.messages.findIndex((message) => message.id === msg.id)
+      if (index > -1) {
+        this.$set(this.messages, index, { ...msg })
+      }
+    },
+    appendProcessEvents(targetMsg, events = []) {
+      if (!targetMsg || !Array.isArray(events) || !events.length) return
+
+      if (!targetMsg.events) targetMsg.events = []
+      if (!targetMsg.eventKeys) targetMsg.eventKeys = {}
+      if (!targetMsg.eventCursor) targetMsg.eventCursor = 0
+
+      let changed = false
+      events.forEach((item) => {
+        const event = this.normalizeProcessEvent(item)
+        if (targetMsg.eventKeys[event.id]) return
+        targetMsg.eventKeys[event.id] = true
+        targetMsg.eventCursor = Math.max(targetMsg.eventCursor, event.createdAt)
+        if (event.type === 'answer_delta') {
+          if (!targetMsg.answerFinalized) {
+            targetMsg.content += event.content || ''
+            targetMsg.html = this.defaultHtml(targetMsg.content)
+            targetMsg.expertCard = null
+            targetMsg.downloadLinks = []
+            changed = true
+          }
+          return
+        }
+        targetMsg.events.push(event)
+        changed = true
+      })
+
+      const hasTerminalEvent = targetMsg.events.some((event) => {
+        return event.status === 'error' || (event.status === 'done' && /完成|失败|异常/.test(event.title || ''))
+      })
+
+      if (hasTerminalEvent) {
+        targetMsg.events = targetMsg.events.map((event) => {
+          if (event.status !== 'running') return event
+          changed = true
+          return { ...event, status: 'done' }
+        })
+      }
+
+      if (changed) {
+        const index = this.messages.findIndex((message) => message.id === targetMsg.id)
+        if (index > -1) {
+          this.$set(this.messages, index, { ...targetMsg })
+        }
+        this.scrollToBottom()
+      }
+    },
+    async fetchProcessEvents(requestId, targetMsg) {
+      if (!requestId || !targetMsg || !this.userId) return
+      try {
+        const res = await getAiEvents({
+          userId: this.userId,
+          requestId,
+          after: targetMsg.eventCursor || 0,
+          limit: 100
+        })
+        this.appendProcessEvents(targetMsg, (res && res.list) || [])
+      } catch (error) {
+        console.warn('fetch process events failed', error)
+      }
+    },
+    startProcessPolling(requestId, targetMsg) {
+      if (this.eventPollTimer) {
+        clearInterval(this.eventPollTimer)
+        this.eventPollTimer = null
+      }
+      this.fetchProcessEvents(requestId, targetMsg)
+      this.eventPollTimer = setInterval(() => {
+        this.fetchProcessEvents(requestId, targetMsg)
+      }, 800)
+    },
+    stopProcessPolling() {
+      if (this.eventPollTimer) {
+        clearInterval(this.eventPollTimer)
+        this.eventPollTimer = null
+      }
+    },
     async sendMessage() {
       const text = this.inputText.trim()
       if ((!text && !this.pendingAttachments.length) || this.sending) return
@@ -1345,12 +1514,15 @@ export default {
       this.quoteMessage = null // 发送后立即清除引用状态
       this.scrollToBottom()
 
+      const requestId = this.createRequestId()
       const placeholder = this.createAssistantPlaceholder()
+      this.startProcessPolling(requestId, placeholder)
 
       try {
         const result = await sendAiMessage({
           userId: this.userId,
           sessionId: this.sessionId,
+          requestId,
           content: displayContent, // 发送纯净内容，引用由云函数处理
           scene: this.pageScene,
           quote: quote, // 单独传递引用对象
@@ -1363,8 +1535,14 @@ export default {
           uni.removeStorageSync(this.clearedSessionKey)
         }
 
+        await this.fetchProcessEvents(requestId, placeholder)
         const reply = (result && result.reply) || '暂时没有返回有效内容，请稍后重试。'
-        await this.typewriterReply(placeholder, reply)
+        if (placeholder.content) {
+          this.finishAssistantMessage(placeholder, reply)
+        } else {
+          placeholder.answerFinalized = true
+          await this.typewriterReply(placeholder, reply)
+        }
       } catch (error) {
         console.error('sendMessage failed', error)
         const message = (error && (error.message || error.msg)) || '发送失败，请稍后再试'
@@ -1372,6 +1550,8 @@ export default {
         // 添加 [DEBUG] 标签，确认是否加载了新代码
         await this.typewriterReply(placeholder, `[系统提示]：${message}`)
       } finally {
+        this.stopProcessPolling()
+        await this.fetchProcessEvents(requestId, placeholder)
         this.sending = false
         this.scrollToBottom()
       }
@@ -1383,11 +1563,32 @@ export default {
         content: '',
         html: '',
         expertCard: null,
-        downloadLinks: []
+        downloadLinks: [],
+        events: [],
+        eventKeys: {},
+        eventCursor: 0,
+        answerFinalized: false
       }
       this.messages.push(msg)
       this.scrollToBottom()
       return msg
+    },
+    finishAssistantMessage(targetMsg, text) {
+      const keepState = {
+        events: targetMsg.events || [],
+        eventKeys: targetMsg.eventKeys || {},
+        eventCursor: targetMsg.eventCursor || 0,
+        answerFinalized: true
+      }
+      const finalMsg = this.buildAssistantMessage(text, {
+        id: targetMsg.id
+      })
+      Object.assign(targetMsg, finalMsg, keepState)
+      const index = this.messages.findIndex((message) => message.id === targetMsg.id)
+      if (index > -1) {
+        this.$set(this.messages, index, { ...targetMsg })
+      }
+      this.scrollToBottom()
     },
     typewriterReply(targetMsg, text) {
       return new Promise((resolve) => {
@@ -1401,12 +1602,7 @@ export default {
           }
 
           if (index >= chars.length) {
-            const finalMsg = this.buildAssistantMessage(text, {
-              id: targetMsg.id
-            })
-            Object.assign(targetMsg, finalMsg)
-            this.$set(this.messages, this.messages.length - 1, { ...targetMsg })
-            this.scrollToBottom()
+            this.finishAssistantMessage(targetMsg, text)
             resolve()
             return
           }
@@ -2231,6 +2427,112 @@ export default {
 .rich-content {
   font-size: 28rpx;
   line-height: 1.7;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.process-panel {
+  margin-bottom: 18rpx;
+  padding: 16rpx 18rpx 12rpx;
+  border-radius: 18rpx;
+  background: #f8fafc;
+  border: 1rpx solid #dbe4f0;
+}
+
+.process-head {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 10rpx;
+}
+
+.process-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 8rpx rgba(37, 99, 235, 0.10);
+}
+
+.process-title {
+  flex: 1;
+  font-size: 24rpx;
+  font-weight: 800;
+  color: #1e3a8a;
+}
+
+.process-count {
+  flex-shrink: 0;
+  padding: 3rpx 10rpx;
+  border-radius: 999rpx;
+  background: #e0ecff;
+  color: #2563eb;
+  font-size: 20rpx;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.process-item {
+  padding: 8rpx 0;
+  border-top: 1rpx solid #e5edf7;
+}
+
+.process-item:first-of-type {
+  border-top: none;
+}
+
+.process-item.expandable {
+  cursor: pointer;
+}
+
+.process-item.expandable:active {
+  background: #eef5ff;
+}
+
+.process-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.process-status {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #3b82f6;
+  margin-top: 14rpx;
+  flex-shrink: 0;
+}
+
+.process-item.done .process-status {
+  background: #16a34a;
+}
+
+.process-item.error .process-status {
+  background: #dc2626;
+}
+
+.process-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.process-item-title {
+  display: block;
+  font-size: 24rpx;
+  line-height: 1.45;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.process-item-content {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #475569;
+  white-space: pre-wrap;
+  word-break: break-word;
   user-select: text;
   -webkit-user-select: text;
 }

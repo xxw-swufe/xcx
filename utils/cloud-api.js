@@ -58,6 +58,13 @@ export function getAiSessions(payload) {
   });
 }
 
+export function getAiEvents(payload) {
+  return callCloud('coze-chat', {
+    action: 'getEvents',
+    ...payload
+  });
+}
+
 export function deleteAiSession(sessionId, userId) {
   return callCloud('coze-chat', {
     action: 'deleteSession',

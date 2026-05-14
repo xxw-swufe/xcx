@@ -10,6 +10,7 @@
   "users": {},
   "chat_sessions": {},
   "chat_messages": {},
+  "chat_events": {},
   "orders": {},
   "members": {},
   "documents": {}
