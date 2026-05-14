@@ -7,6 +7,8 @@ const DEFAULT_COZE_API_BASE = 'https://api.coze.cn';
 const DEFAULT_COZE_BOT_ID = '7619186763315249193';
 const DEFAULT_COZE_TOKEN = 'sat_hBYTVDXcBXZEj30zDcCNwEZ4S6cGetB4uYvhupH2wefPDfcSZ8GtETvAdxMz7ZCh';
 const COZE_TIMEOUT = [300000, 300000];
+const HISTORY_MESSAGE_LIMIT = 24;
+const HISTORY_CONTEXT_CHAR_LIMIT = 12000;
 const BOT_ID_MAP = {
   general: process.env.COZE_BOT_ID_GENERAL || process.env.COZE_BOT_ID || DEFAULT_COZE_BOT_ID,
   letter: process.env.COZE_BOT_ID_LETTER || '7633245375314329600',
@@ -45,6 +47,96 @@ function getCozeConfig() {
 
 function getBotId(scene) {
   return BOT_ID_MAP[scene] || BOT_ID_MAP.general;
+}
+
+function compactText(value, maxLength = 1200) {
+  const text = String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}...`;
+}
+
+async function getRecentHistoryMessages(userId, sessionId, scene) {
+  if (!userId || !sessionId) return [];
+
+  const result = await db.collection('chat_messages')
+    .where({
+      user_id: userId,
+      session_id: sessionId,
+      scene
+    })
+    .orderBy('created_at', 'desc')
+    .limit(HISTORY_MESSAGE_LIMIT)
+    .get();
+
+  return ((result && result.data) || []).reverse();
+}
+
+function buildHistoryContext(messages) {
+  if (!Array.isArray(messages) || !messages.length) return '';
+
+  const lines = [];
+  for (const message of messages) {
+    const role = message.role === 'assistant' ? '助手' : message.role === 'user' ? '用户' : '系统';
+    const content = compactText(message.content, 900);
+    if (!content) continue;
+    lines.push(`${role}：${content}`);
+  }
+
+  let context = lines.join('\n\n');
+  if (context.length > HISTORY_CONTEXT_CHAR_LIMIT) {
+    context = context.slice(context.length - HISTORY_CONTEXT_CHAR_LIMIT);
+    const firstBreak = context.indexOf('\n\n');
+    if (firstBreak > -1) {
+      context = context.slice(firstBreak + 2);
+    }
+  }
+
+  return context.trim();
+}
+
+function hasFragmentedCozeHistory(messages, currentConversationId) {
+  if (!currentConversationId || !Array.isArray(messages) || !messages.length) return false;
+
+  return messages.some((message) => {
+    if (!message || message.role !== 'assistant') return false;
+    const response = message.raw_response || {};
+    const messageConversationId = response.conversationId || response.conversation_id || '';
+    return messageConversationId && messageConversationId !== currentConversationId;
+  });
+}
+
+function buildCozeInput({ content, quote, historyContext }) {
+  const currentContent = String(content || '').trim();
+  const quoteContent = quote && typeof quote.content === 'string'
+    ? compactText(quote.content, 1200)
+    : '';
+
+  if (!historyContext && !quoteContent) {
+    return currentContent;
+  }
+
+  const sections = [];
+
+  if (historyContext) {
+    sections.push(
+      '[本次会话的历史上下文]\n' +
+      '以下内容来自当前历史会话的真实聊天记录。回答用户当前问题时必须参考这些历史；如果用户询问“之前说过什么”“总共和你说了哪些话”等，请依据这里的历史记录回答，不要只看当前这一句。\n' +
+      historyContext
+    );
+  }
+
+  if (quoteContent) {
+    sections.push(`用户引用了之前的消息：\n${quoteContent}`);
+  }
+
+  sections.push(`请回答用户这次的问题：\n${currentContent}`);
+
+  return sections.join('\n\n---\n\n');
 }
 
 function getTraceInfo(res) {
@@ -184,7 +276,9 @@ function cozeRequest({ token, url, method = 'GET', data, dataType = 'text' }) {
 }
 
 async function callCozeChat({ token, botId, apiBase, userId, content, conversationId = '' }) {
-  const url = `${apiBase}/v3/chat`;
+  const url = conversationId
+    ? `${apiBase}/v3/chat?conversation_id=${encodeURIComponent(conversationId)}`
+    : `${apiBase}/v3/chat`;
 
   console.log('[coze-chat] Requesting Coze V3:', {
     url,
@@ -203,7 +297,6 @@ async function callCozeChat({ token, botId, apiBase, userId, content, conversati
       user_id: String(userId),
       stream: true,
       auto_save_history: true,
-      conversation_id: conversationId || undefined,
       additional_messages: [
         {
           content: String(content),
@@ -307,6 +400,10 @@ async function sendMessage(event) {
   if (sessionResult.code && sessionResult.code !== 0) return sessionResult;
 
   const { currentSessionId, currentTime, session } = sessionResult;
+  const oldConversationId = session && session.coze_conversation_id ? session.coze_conversation_id : '';
+  const historyMessages = await getRecentHistoryMessages(userId, currentSessionId, scene);
+  const shouldInjectLocalHistory = hasFragmentedCozeHistory(historyMessages, oldConversationId);
+  const historyContext = shouldInjectLocalHistory ? buildHistoryContext(historyMessages) : '';
 
   // 1. 存储用户消息到数据库
   await db.collection('chat_messages').add({
@@ -324,13 +421,13 @@ async function sendMessage(event) {
   // 2. 获取 Coze 配置
   const { token, apiBase } = getCozeConfig();
   const botId = getBotId(scene);
-  const oldConversationId = session && session.coze_conversation_id ? session.coze_conversation_id : '';
 
-  // 3. 构建包含上下文的提示词 (如果存在引用)
-  let apiContent = content;
-  if (quote && typeof quote.content === 'string' && quote.content.trim()) {
-    apiContent = `[CONTEXT: 用户引用了之前的消息]:\n"${quote.content.trim()}"\n\n[USER REPLY]:\n${content}`;
-  }
+  // 3. 优先依赖 Coze conversation_id 续上下文；仅当历史已被旧逻辑打散到多个 Coze 会话时注入本地历史兜底
+  const apiContent = buildCozeInput({
+    content,
+    quote,
+    historyContext
+  });
 
   let cozeResult;
   try {

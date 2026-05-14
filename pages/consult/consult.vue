@@ -636,7 +636,10 @@ export default {
       // 只去除末尾明显的中文标点和非单词字符的英文标点（保留 .pdf 这种后缀中的点）
       // 使用正则：如果点后面紧跟的是非字母数字，或者是字符串末尾且前面是字母数字，则可能是后缀，不应删除
       // 这里采用更简单稳妥的方法：只删除末尾的 [，。；;！!？?] 和紧跟在非字母数字后的句号
-      return cleaned.replace(/[，。；;！!？?,]+$/, '').replace(/([^a-zA-Z0-9])\.$/, '$1')
+      return cleaned
+        .replace(/[，。；;！!？?,\]\}"'）】》]+$/, '')
+        .replace(/\)+$/, '')
+        .replace(/([^a-zA-Z0-9])\.$/, '$1')
     },
     getFileNameFromUrl(url) {
       if (!url) return '文件'
@@ -654,100 +657,174 @@ export default {
       const path = url.split('?')[0].split('#')[0].toLowerCase()
       return /\.(doc|docx|pdf|xls|xlsx|ppt|pptx|txt|zip|rar)$/i.test(path)
     },
+    isDownloadFileUrl(url) {
+      if (!url) return false
+      const path = String(url || '').split('?')[0].split('#')[0].toLowerCase()
+      return /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar|png|jpg|jpeg|gif|bmp|webp)$/i.test(path)
+    },
+    collectMarkdownLinks(source) {
+      const links = []
+      let index = 0
+
+      while (index < source.length) {
+        const labelStart = source.indexOf('[', index)
+        if (labelStart === -1) break
+
+        const labelEnd = source.indexOf(']', labelStart + 1)
+        if (labelEnd === -1 || source[labelEnd + 1] !== '(') {
+          index = labelStart + 1
+          continue
+        }
+
+        let cursor = labelEnd + 2
+        let depth = 1
+        let urlEnd = -1
+        while (cursor < source.length) {
+          const char = source[cursor]
+          if (char === '(') {
+            depth += 1
+          } else if (char === ')') {
+            depth -= 1
+            if (depth === 0) {
+              urlEnd = cursor
+              break
+            }
+          }
+          cursor += 1
+        }
+
+        if (urlEnd === -1) {
+          index = labelEnd + 1
+          continue
+        }
+
+        const label = source.slice(labelStart + 1, labelEnd).trim()
+        const urlPart = source.slice(labelEnd + 2, urlEnd).trim()
+        const urlMatch = urlPart.match(/^(https?:\/\/\S+)/i)
+        if (urlMatch) {
+          links.push({
+            label,
+            url: urlMatch[1],
+            start: labelStart,
+            end: urlEnd + 1
+          })
+        }
+
+        index = urlEnd + 1
+      }
+
+      return links
+    },
     extractDownloadLinks(text) {
       const source = String(text || '')
       const links = []
-      
-      // 策略 1: 贪婪捕捉以特定后缀结尾的 URL (这是最稳妥的方案，不依赖正则的复杂性)
-      // 我们寻找 http，然后一直抓到 .pdf, .docx 等后缀出现为止
-      const commonExtensions = ['pdf', 'docx', 'doc', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', 'txt', 'png', 'jpg', 'jpeg'];
-      
-      let tempText = source;
-      
-      // 先尝试寻找所有的 http 链接
-      const httpIndices = [];
-      let pos = tempText.indexOf('http');
-      while (pos !== -1) {
-        httpIndices.push(pos);
-        pos = tempText.indexOf('http', pos + 4);
-      }
-      
-      // 倒序处理，防止替换时位置错乱
-      for (let i = httpIndices.length - 1; i >= 0; i--) {
-        const start = httpIndices[i];
-        // 从 http 开始向后寻找最近的空白字符或中文或引号
-        let end = tempText.length;
-        for (let j = start; j < tempText.length; j++) {
-          const char = tempText[j];
-          // 遇到空格、换行、双引号、或者是中文，则认为是 URL 的潜在结束
-          if (/[\s"\u4e00-\u9fa5]/.test(char)) {
-            end = j;
-            break;
-          }
+      const replacements = []
+      const seen = new Set()
+      const markdownLinks = this.collectMarkdownLinks(source)
+      const scanChars = source.split('')
+
+      const formatLabel = (label, url) => {
+        let result = String(label || '')
+          .replace(/^[\s*`_"']+|[\s*`_"']+$/g, '')
+          .trim()
+        if (!result || /^https?:\/\//i.test(result) || result.length > 80) {
+          result = this.getFileNameFromUrl(url)
         }
-        
-        let rawUrl = tempText.substring(start, end);
-        
-        // 核心加固：检查这个抓到的片段里是否包含我们要的后缀
-        // 如果 rawUrl 看起来被截断了（比如后面紧跟着 .pdf），我们要把它补回来
-        const lowerUrl = rawUrl.toLowerCase();
-        let hasExt = commonExtensions.some(ext => lowerUrl.includes('.' + ext));
-        
-        // 如果没找到后缀，尝试继续向后探查，直到找到后缀或遇到真正的分隔符
-        if (!hasExt) {
-          const remaining = tempText.substring(end);
-          for (const ext of commonExtensions) {
-            const extIndex = remaining.toLowerCase().indexOf('.' + ext);
-            if (extIndex !== -1) {
-              // 找到了！补全它
-              const bonus = remaining.substring(0, extIndex + ext.length + 1);
-              // 检查 bonus 中是否包含空格，如果有空格说明不是同一个链接
-              if (!/\s/.test(bonus)) {
-                end += extIndex + ext.length + 1;
-                rawUrl = tempText.substring(start, end);
-                break;
-              }
-            }
-          }
+        return result || '文件'
+      }
+
+      const addLink = (label, rawUrl, start, end) => {
+        const url = this.normalizeUrl(rawUrl)
+        if (!this.isDownloadFileUrl(url)) return
+
+        const finalLabel = formatLabel(label, url)
+        const key = url.toLowerCase()
+        if (!seen.has(key)) {
+          seen.add(key)
+          links.push({
+            label: finalLabel,
+            url
+          })
+        }
+        replacements.push({
+          start,
+          end,
+          text: `🔗[${finalLabel}]`
+        })
+      }
+
+      markdownLinks.forEach((item) => {
+        for (let i = item.start; i < item.end; i += 1) {
+          scanChars[i] = ' '
         }
 
-        // 净化 URL：去掉末尾的标点（但保留后缀的点）
-        const finalUrl = rawUrl.replace(/[，。；！!？?,)\]"']+$/, '');
-        const fileName = this.getFileNameFromUrl(finalUrl);
-        
-        links.push({
-          label: fileName,
-          url: finalUrl
-        });
-        
-        // 在正文中用图标占位
-        tempText = tempText.substring(0, start) + `🔗[${fileName}]` + tempText.substring(end);
+        const labelUrl = this.normalizeUrl(item.label)
+        const hrefUrl = this.normalizeUrl(item.url)
+        const preferLabelUrl = /^https?:\/\//i.test(labelUrl) && this.isDownloadFileUrl(labelUrl)
+        const finalUrl = preferLabelUrl ? labelUrl : hrefUrl
+        addLink(item.label, finalUrl, item.start, item.end)
+      })
+
+      const scanSource = scanChars.join('')
+      const fileUrlPattern = /https?:\/\/[^\s"'<>]+?\.(?:pdf|docx?|xlsx?|pptx?|zip|rar|txt|png|jpe?g|gif|bmp|webp)(?:\?[^\s"'<>]*)?/ig
+      let match
+      while ((match = fileUrlPattern.exec(scanSource)) !== null) {
+        const rawUrl = match[0]
+        const start = match.index
+        const end = start + rawUrl.length
+        addLink('', rawUrl, start, end)
       }
+
+      let tempText = source
+      replacements
+        .sort((a, b) => b.start - a.start)
+        .forEach((item) => {
+          tempText = tempText.substring(0, item.start) + item.text + tempText.substring(item.end)
+        })
 
       return {
         content: tempText.replace(/\n{3,}/g, '\n\n').trim(),
-        links: links.reverse() // 恢复正序
+        links
       }
     },
     extractExpertCard(text) {
       const source = String(text || '')
-      const hasExpertMarker = /专家咨询链接|专家姓名/.test(source)
+      const cleanSource = source.replace(/\*\*/g, '').replace(/__/g, '').replace(/`/g, '')
+      const hasExpertMarker = /专家咨询链接|接入链接|专家链接|在线咨询链接|专家姓名/.test(cleanSource)
       if (!hasExpertMarker) return null
 
-      const markdownLink = source.match(/\[专家咨询链接\]\((https?:\/\/[^)\s]+)\)/i)
-      const labelLink = source.match(/专家咨询链接\s*[：:]\s*(https?:\/\/[^\s)\]，。]+)/i)
-      const urlMatch = labelLink || markdownLink || source.match(/https?:\/\/[^\s)\]，。]+/i)
-      if (!urlMatch) return null
+      const linkLine = source
+        .split('\n')
+        .find((line) => /专家咨询链接|接入链接|专家链接|在线咨询链接/.test(line.replace(/\*\*/g, '').replace(/__/g, '')))
 
-      const rawUrl = labelLink ? labelLink[1] : markdownLink ? markdownLink[1] : urlMatch[0]
-      const url = String(rawUrl || '').replace(/[，。；;,.]+$/, '')
+      let rawUrl = ''
+      if (linkLine) {
+        const markdownLink = linkLine.match(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/i)
+        if (markdownLink) {
+          const labelUrl = this.normalizeUrl(markdownLink[1])
+          const hrefUrl = this.normalizeUrl(markdownLink[2])
+          rawUrl = /^https?:\/\//i.test(labelUrl) ? labelUrl : hrefUrl
+        } else {
+          const labelLink = linkLine.match(/(?:专家咨询链接|接入链接|专家链接|在线咨询链接)\s*[：:]\s*(https?:\/\/[^\s)\]，。]+)/i)
+          rawUrl = labelLink ? labelLink[1] : ''
+        }
+      }
+
+      if (!rawUrl) {
+        const fallback = source.match(/https?:\/\/[^\s)\]，。]+/i)
+        rawUrl = fallback ? fallback[0] : ''
+      }
+
+      const url = this.normalizeUrl(rawUrl)
       if (!url) return null
 
-      const nameMatch = source.match(/专家姓名\s*[：:]\s*([^\s\n\r，。]+)/)
-      const name = nameMatch && nameMatch[1] ? nameMatch[1].trim() : '专家咨询'
+      const nameMatch = cleanSource.match(/专家姓名\s*[：:]\s*([^\n\r，。]+)/)
+      const name = nameMatch && nameMatch[1]
+        ? nameMatch[1].replace(/^[\s*_:：-]+|[\s*_]+$/g, '').trim()
+        : '专家咨询'
 
       return {
-        name,
+        name: name || '专家咨询',
         url
       }
     },
@@ -759,7 +836,7 @@ export default {
         .filter((line) => {
           const trimmed = line.trim()
           if (!trimmed) return true
-          if (/专家咨询链接\s*[：:]/.test(trimmed)) return false
+          if (/(专家咨询链接|接入链接|专家链接|在线咨询链接)\s*[：:]/.test(trimmed)) return false
           if (/^\[专家咨询链接\]\(https?:\/\/[^)]+\)/i.test(trimmed)) return false
           if (/专家姓名\s*[：:]/.test(trimmed)) return false
           if (trimmed === card.url) return false
@@ -770,9 +847,10 @@ export default {
         .trim()
     },
     buildAssistantMessage(content, extra = {}) {
-      const downloadBlock = this.extractDownloadLinks(content)
       const expertCard = this.extractExpertCard(content)
-      const displayContent = this.removeExpertCardLines(downloadBlock.content, expertCard)
+      const contentWithoutExpert = this.removeExpertCardLines(content, expertCard)
+      const downloadBlock = this.extractDownloadLinks(contentWithoutExpert)
+      const displayContent = downloadBlock.content
 
       return {
         ...extra,
@@ -1022,6 +1100,9 @@ export default {
       if (['doc', 'docx'].includes(ext)) return 'icon-word'
       if (['xls', 'xlsx'].includes(ext)) return 'icon-excel'
       if (['ppt', 'pptx'].includes(ext)) return 'icon-ppt'
+      if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext)) return 'icon-image'
+      if (['zip', 'rar'].includes(ext)) return 'icon-archive'
+      if (['txt'].includes(ext)) return 'icon-text'
       return 'icon-file'
     },
     getFileTypeLabel(url) {
@@ -1957,6 +2038,9 @@ export default {
   &.icon-word { background: #e0e7ff; .file-icon-text { color: #2563eb; } }
   &.icon-excel { background: #dcfce7; .file-icon-text { color: #16a34a; } }
   &.icon-ppt { background: #ffedd5; .file-icon-text { color: #ea580c; } }
+  &.icon-image { background: #fce7f3; .file-icon-text { color: #db2777; } }
+  &.icon-archive { background: #fef3c7; .file-icon-text { color: #b45309; } }
+  &.icon-text { background: #e0f2fe; .file-icon-text { color: #0284c7; } }
   &.icon-file { background: #f1f5f9; .file-icon-text { color: #475569; } }
 }
 
