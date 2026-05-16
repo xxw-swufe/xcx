@@ -1641,33 +1641,6 @@ export default {
       }
     },
     pickCameraImage() {
-      if (typeof uni.chooseMessageFile === 'function') {
-        uni.chooseMessageFile({
-          count: 1,
-          type: 'file',
-          success: (res) => {
-            const file = (res.tempFiles && res.tempFiles[0]) || {}
-            const filePath = file.path || file.tempFilePath || ''
-            const fileName = file.name || (filePath ? filePath.split('/').pop() : '文件')
-            const isImage = /\.(png|jpe?g|gif|bmp|webp)$/i.test(fileName)
-            this.pendingAttachments.push({
-              id: `${isImage ? 'img' : 'file'}-${Date.now()}`,
-              type: isImage ? 'image' : 'file',
-              title: fileName,
-              subtitle: '等待发送',
-              filePath,
-              fileSize: file.size || 0
-            })
-            this.scrollToBottom()
-            uni.showToast({ title: '文件已加入待发送区', icon: 'none' })
-          },
-          fail: () => {
-            uni.showToast({ title: '未能选择文件', icon: 'none' })
-          }
-        })
-        return
-      }
-
       uni.chooseImage({
         count: 1,
         sourceType: ['camera'],
@@ -1683,7 +1656,7 @@ export default {
             filePath
           })
           this.scrollToBottom()
-          uni.showToast({ title: '图片已加入待发送区', icon: 'none' })
+          uni.showToast({ title: '照片已加入待发送区', icon: 'none' })
         },
         fail: () => {
           uni.showToast({ title: '未能打开摄像头', icon: 'none' })
