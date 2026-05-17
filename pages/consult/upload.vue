@@ -85,8 +85,12 @@ export default {
   data() {
     return {
       uploadedFiles: [],
-      uploading: false
+      uploading: false,
+      target: ''
     }
+  },
+  onLoad(options = {}) {
+    this.target = decodeURIComponent(options.target || '')
   },
   methods: {
     goBack() {
@@ -226,7 +230,7 @@ export default {
 
       if (this.uploadedFiles.length > 0) {
         // 将已上传的文件列表通过事件总线发送回聊天页面
-        uni.$emit('upload-files-completed', this.uploadedFiles.map(file => ({
+        const files = this.uploadedFiles.map(file => ({
           id: `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           type: file.isImage ? 'image' : 'file',
           title: file.name,
@@ -234,7 +238,12 @@ export default {
           fileUrl: file.fileUrl,
           fileID: file.fileID,
           fileSize: 0 // 可以在 addAndUploadFile 中记录原始大小
-        })))
+        }))
+
+        uni.$emit('upload-files-completed', {
+          target: this.target,
+          files
+        })
       }
 
       uni.showToast({ title: '已同步至聊天', icon: 'success' })

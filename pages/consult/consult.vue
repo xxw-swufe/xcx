@@ -1,6 +1,6 @@
 <template>
   <view class="consult-page">
-    <view class="nav-header">
+    <view class="nav-header" :style="navHeaderStyle">
       <view v-if="showBack" class="nav-left">
         <view class="nav-back" @click="handleBack">
           <uni-icons type="left" size="18" color="#1e3a8a" />
@@ -146,40 +146,11 @@
               <view v-if="msg.quote" class="quote-content" @click="scrollToMessage(msg.quote.id)">
                 <text class="quote-text" selectable="true">「 {{ msg.quote.content }} 」</text>
               </view>
-              <view
-                v-if="getVisibleProcessEvents(msg).length"
-                class="process-panel"
-              >
-                <view class="process-head">
-                  <view class="process-dot"></view>
-                  <text class="process-title">智能体执行过程</text>
-                  <text class="process-count">{{ getVisibleProcessEvents(msg).length }} 步</text>
+              <view v-if="shouldShowAgentStatus(msg)" class="agent-working">
+                <view class="agent-spinner">
+                  <view class="agent-spinner-core"></view>
                 </view>
-                <view
-                  v-for="event in getVisibleProcessEvents(msg)"
-                  :key="event.id"
-                  class="process-item"
-                  :class="[event.status, { expandable: canExpandProcessEvent(event), expanded: event.expanded }]"
-                  @click.stop="toggleProcessEvent(msg, event)"
-                >
-                  <view class="process-line">
-                    <view class="process-status"></view>
-                    <view class="process-main">
-                      <text class="process-item-title">{{ getProcessEventTitle(event) }}</text>
-                      <text
-                        v-if="event.expanded && canExpandProcessEvent(event)"
-                        class="process-item-content"
-                        selectable="true"
-                      >{{ event.content }}</text>
-                    </view>
-                    <uni-icons
-                      v-if="canExpandProcessEvent(event)"
-                      :type="event.expanded ? 'arrowup' : 'arrowdown'"
-                      size="13"
-                      color="#94a3b8"
-                    />
-                  </view>
-                </view>
+                <text class="agent-working-text">{{ getAgentWorkStatus(msg) }}</text>
               </view>
               <rich-text v-if="msg.html" class="rich-content" :nodes="msg.html" user-select="true" />
               <view v-if="msg.downloadLinks && msg.downloadLinks.length" class="download-links">
@@ -218,34 +189,28 @@
               <view v-if="msg.quote" class="quote-content" @click="scrollToMessage(msg.quote.id)">
                 <text class="quote-text" selectable="true">「 {{ msg.quote.content }} 」</text>
               </view>
-              <template v-if="msg.type === 'image'">
-                <image class="chat-image" :src="msg.filePath" mode="widthFix" />
-                <text class="msg-text file-note" selectable="true">{{ msg.content }}</text>
-              </template>
-              <template v-else-if="msg.type === 'audio'">
-                <view class="audio-card">
-                  <view class="voice-wave-icon">
-                    <view class="wave-bar bar-1" style="background-color: #1e3a8a;"></view>
-                    <view class="wave-bar bar-2" style="background-color: #1e3a8a;"></view>
-                    <view class="wave-bar bar-3" style="background-color: #1e3a8a;"></view>
-                    <view class="wave-bar bar-4" style="background-color: #1e3a8a;"></view>
+              <text v-if="getUserMessageText(msg)" class="msg-text" selectable="true">{{ getUserMessageText(msg) }}</text>
+              <view v-if="msg.attachments && msg.attachments.length" class="user-attachment-list">
+                <view
+                  v-for="(file, fileIdx) in msg.attachments"
+                  :key="file.id || file.fileID || file.url || fileIdx"
+                  class="user-attachment-card"
+                >
+                  <image
+                    v-if="file.type === 'image' && getUserAttachmentUrl(file)"
+                    class="user-attachment-image"
+                    :src="getUserAttachmentUrl(file)"
+                    mode="aspectFill"
+                  />
+                  <view v-else class="user-attachment-icon" :class="getFileTypeClass(getUserAttachmentName(file))">
+                    <text class="user-attachment-ext">{{ getFileTypeLabel(getUserAttachmentName(file)) }}</text>
                   </view>
-                  <view class="audio-info">
-                    <text class="msg-text" selectable="true">{{ msg.content }}</text>
-                    <text class="file-note">{{ msg.extra || '' }}</text>
-                  </view>
-                </view>
-              </template>
-              <template v-else-if="msg.type === 'file'">
-                <view class="audio-card">
-                  <uni-icons type="paperclip" size="18" color="#1e3a8a" />
-                  <view class="audio-info">
-                    <text class="msg-text" selectable="true">{{ msg.content }}</text>
-                    <text class="file-note">{{ msg.extra || '' }}</text>
+                  <view class="user-attachment-info">
+                    <text class="user-attachment-name">{{ getUserAttachmentName(file) }}</text>
+                    <text class="user-attachment-meta">{{ getUserAttachmentMeta(file) }}</text>
                   </view>
                 </view>
-              </template>
-              <text v-else class="msg-text" selectable="true">{{ msg.content }}</text>
+              </view>
             </view>
             <view v-if="msg.role === 'user'" class="msg-op-bar">
               <view class="op-btn" @click.stop="handleCopy(msg)">
@@ -419,6 +384,9 @@ export default {
       streamTimer: null,
       voiceStopTimer: null,
       eventPollTimer: null,
+      uploadTargetId: `chat-upload-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      uploadFilesEventBound: false,
+      menuButtonRightReserve: 0,
       userProfile: {
         nickname: DEFAULT_NICKNAME,
         avatar: DEFAULT_AVATAR
@@ -449,23 +417,68 @@ export default {
         (s.title || '').toLowerCase().includes(q) || 
         (s.last_message || '').toLowerCase().includes(q)
       )
+    },
+    navHeaderStyle() {
+      if (!this.menuButtonRightReserve) return ''
+      return `padding-right:${this.menuButtonRightReserve}px`
     }
   },
-  onShow() {
+  mounted() {
+    this.updateMenuButtonSafeArea()
     this.initializeChat()
-    // 监听文件上传完成事件
-    uni.$off('upload-files-completed')
-    uni.$on('upload-files-completed', (files) => {
+    this.bindUploadFilesCompleted()
+  },
+  onShow() {
+    this.updateMenuButtonSafeArea()
+    this.initializeChat()
+    this.bindUploadFilesCompleted()
+  },
+  onUnload() {
+    this.unbindUploadFilesCompleted()
+    this.clearTimers()
+  },
+  beforeDestroy() {
+    this.unbindUploadFilesCompleted()
+  },
+  beforeUnmount() {
+    this.unbindUploadFilesCompleted()
+  },
+  methods: {
+    bindUploadFilesCompleted() {
+      if (this.uploadFilesEventBound) return
+      uni.$on('upload-files-completed', this.handleUploadFilesCompleted)
+      this.uploadFilesEventBound = true
+    },
+    unbindUploadFilesCompleted() {
+      if (!this.uploadFilesEventBound) return
+      uni.$off('upload-files-completed', this.handleUploadFilesCompleted)
+      this.uploadFilesEventBound = false
+    },
+    handleUploadFilesCompleted(payload) {
+      const files = Array.isArray(payload) ? payload : (payload && payload.files)
+      const target = payload && !Array.isArray(payload) ? payload.target : ''
+
+      if (target && target !== this.uploadTargetId) return
       if (Array.isArray(files) && files.length > 0) {
         this.pendingAttachments = [...this.pendingAttachments, ...files]
         this.scrollToBottom()
       }
-    })
-  },
-  onUnload() {
-    this.clearTimers()
-  },
-  methods: {
+    },
+    updateMenuButtonSafeArea() {
+      // 微信小程序右上角胶囊按钮会覆盖页面内容，这里为自定义导航栏预留安全区。
+      if (typeof uni.getMenuButtonBoundingClientRect !== 'function') return
+
+      try {
+        const menuButton = uni.getMenuButtonBoundingClientRect()
+        const systemInfo = uni.getSystemInfoSync ? uni.getSystemInfoSync() : {}
+        const windowWidth = systemInfo.windowWidth || 0
+        if (!menuButton || !menuButton.left || !windowWidth) return
+
+        this.menuButtonRightReserve = Math.max(windowWidth - menuButton.left + 8, 0)
+      } catch (error) {
+        this.menuButtonRightReserve = 0
+      }
+    },
     clearTimers() {
       if (this.streamTimer) {
         clearTimeout(this.streamTimer)
@@ -902,7 +915,7 @@ export default {
         replacements.push({
           start,
           end,
-          text: `🔗[${finalLabel}]`
+          text: ''
         })
       }
 
@@ -936,9 +949,27 @@ export default {
         })
 
       return {
-        content: tempText.replace(/\n{3,}/g, '\n\n').trim(),
+        content: this.cleanupExtractedDownloadText(tempText),
         links
       }
+    },
+    cleanupExtractedDownloadText(text) {
+      return String(text || '')
+        .split(/\r?\n/)
+        .map((line) => {
+          return line
+            .replace(/(?:下载链接|文件链接|附件链接|下载地址|文件地址|附件地址)\s*[：:]\s*$/i, '')
+            .trimEnd()
+        })
+        .filter((line) => {
+          const trimmed = line.trim()
+          if (!trimmed) return false
+          if (/^(?:下载链接|文件链接|附件链接|下载地址|文件地址|附件地址)\s*[：:]?$/i.test(trimmed)) return false
+          return true
+        })
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
     },
     extractExpertCard(text) {
       const source = String(text || '')
@@ -1123,6 +1154,7 @@ export default {
             id: item._id,
             role: item.role,
             content: item.content,
+            attachments: item.attachments || [],
             html: ''
           }
         })
@@ -1229,20 +1261,37 @@ export default {
       const parts = []
       if (text) parts.push(text)
       attachments.forEach((item) => {
-        const fileUrl = item.fileUrl || item.url || item.fileID || ''
+        const title = item.title || item.name || '附件'
         if (item.type === 'image') {
-          parts.push(`图片附件：${item.title}`)
+          parts.push(`图片附件：${title}`)
         } else if (item.type === 'audio') {
-          parts.push(`语音附件：${item.title}`)
+          parts.push(`语音附件：${title}`)
         } else {
-          parts.push(`文件附件：${item.title}`)
-        }
-
-        if (fileUrl) {
-          parts.push(`附件地址：${fileUrl}`)
+          parts.push(`文件附件：${title}`)
         }
       })
       return parts.join('\n')
+    },
+    getUserMessageText(msg = {}) {
+      return String(msg.content || '')
+        .split(/\r?\n/)
+        .filter((line) => {
+          const trimmed = line.trim()
+          return !/^(图片附件|语音附件|文件附件|附件地址)/.test(trimmed)
+        })
+        .join('\n')
+        .trim()
+    },
+    getUserAttachmentName(file = {}) {
+      return file.name || file.title || file.fileName || file.file_name || '附件'
+    },
+    getUserAttachmentUrl(file = {}) {
+      return file.url || file.fileUrl || file.fileID || file.filePath || ''
+    },
+    getUserAttachmentMeta(file = {}) {
+      if (file.type === 'image') return '图片附件'
+      if (file.type === 'audio') return '语音附件'
+      return `${this.getFileTypeLabel(this.getUserAttachmentName(file))} 文件`
     },
     getFileExt(fileName) {
       const match = String(fileName || '').match(/\.([^.?#/]+)$/)
@@ -1256,7 +1305,7 @@ export default {
       if (['ppt', 'pptx'].includes(ext)) return 'icon-ppt'
       if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext)) return 'icon-image'
       if (['zip', 'rar'].includes(ext)) return 'icon-archive'
-      if (['txt'].includes(ext)) return 'icon-text'
+      if (['txt', 'md', 'markdown'].includes(ext)) return 'icon-text'
       return 'icon-file'
     },
     getFileTypeLabel(url) {
@@ -1387,6 +1436,25 @@ export default {
     getVisibleProcessEvents(msg) {
       return ((msg && msg.events) || []).filter(this.isVisibleProcessEvent)
     },
+    shouldShowAgentStatus(msg) {
+      return !!(msg && msg.role === 'assistant' && msg.isWorking && !msg.answerFinalized)
+    },
+    getAgentWorkStatus(msg) {
+      const events = this.getVisibleProcessEvents(msg)
+      const runningEvent = [...events].reverse().find((event) => event.status === 'running')
+      const latestEvent = runningEvent || events[events.length - 1]
+      const title = this.getProcessEventTitle(latestEvent)
+
+      if (title && title !== '智能体事件') {
+        return title
+      }
+
+      if (msg && msg.content) {
+        return '正在生成回复'
+      }
+
+      return '智能体正在工作'
+    },
     toggleProcessEvent(msg, event) {
       if (!msg || !event || !this.canExpandProcessEvent(event)) return
       event.expanded = !event.expanded
@@ -1497,16 +1565,17 @@ export default {
       const requestAttachments = uploadedAttachments.map(this.normalizeAttachmentForRequest)
       
       // 1. 构建 UI 显示用的纯净内容
-      const displayContent = this.buildPendingSummary(text, uploadedAttachments)
+      const requestContent = this.buildPendingSummary(text, uploadedAttachments)
       const quote = (this.quoteMessage && this.quoteMessage.content) ? { ...this.quoteMessage } : null
       
       // 2. 将消息推入本地列表（UI 显示）
       this.messages.push({
         id: `user-${Date.now()}`,
         role: 'user',
-        content: displayContent, 
+        content: text,
         quote: quote,
-        type: uploadedAttachments.length === 1 ? uploadedAttachments[0].type : 'text'
+        type: 'text',
+        attachments: uploadedAttachments
       })
 
       this.inputText = ''
@@ -1523,7 +1592,7 @@ export default {
           userId: this.userId,
           sessionId: this.sessionId,
           requestId,
-          content: displayContent, // 发送纯净内容，引用由云函数处理
+          content: requestContent, // 发送纯净内容，引用由云函数处理
           scene: this.pageScene,
           quote: quote, // 单独传递引用对象
           attachments: requestAttachments
@@ -1567,7 +1636,8 @@ export default {
         events: [],
         eventKeys: {},
         eventCursor: 0,
-        answerFinalized: false
+        answerFinalized: false,
+        isWorking: true
       }
       this.messages.push(msg)
       this.scrollToBottom()
@@ -1578,7 +1648,8 @@ export default {
         events: targetMsg.events || [],
         eventKeys: targetMsg.eventKeys || {},
         eventCursor: targetMsg.eventCursor || 0,
-        answerFinalized: true
+        answerFinalized: true,
+        isWorking: false
       }
       const finalMsg = this.buildAssistantMessage(text, {
         id: targetMsg.id
@@ -1611,6 +1682,7 @@ export default {
           targetMsg.html = this.defaultHtml(targetMsg.content)
           targetMsg.expertCard = null
           targetMsg.downloadLinks = []
+          targetMsg.isWorking = true
           this.$set(this.messages, this.messages.length - 1, { ...targetMsg })
           index += 1
           this.scrollToBottom()
@@ -1723,7 +1795,7 @@ export default {
       uni.showToast({ title: '聊天记录已清空', icon: 'none' })
     },
     goUpload() {
-      uni.navigateTo({ url: '/pages/consult/upload' })
+      uni.navigateTo({ url: `/pages/consult/upload?target=${encodeURIComponent(this.uploadTargetId)}` })
     },
     goProfile() {
       uni.switchTab({ url: '/pages/profile/profile' })
@@ -1755,32 +1827,16 @@ export default {
       const isFile = this.isWordFileUrl(url) || path.endsWith('.pdf') || path.endsWith('.ppt') || path.endsWith('.pptx')
 
       if (isFile) {
-        uni.showLoading({ title: '正在下载文件' })
-        uni.downloadFile({
-          url,
-          success: (res) => {
-            if (!res || res.statusCode !== 200 || !res.tempFilePath) {
-              uni.hideLoading()
-              uni.showToast({ title: '下载失败', icon: 'none' })
-              return
+        uni.showActionSheet({
+          itemList: ['打开预览', '保存到小程序本地', '复制下载链接'],
+          success: (e) => {
+            if (e.tapIndex === 0) {
+              this.openDownloadedDocument(url, fileName, path)
+            } else if (e.tapIndex === 1) {
+              this.saveDownloadedDocument(url, fileName)
+            } else if (e.tapIndex === 2) {
+              this.copyDownloadUrl(url)
             }
-
-            const ext = path.split('.').pop()
-            uni.openDocument({
-              filePath: res.tempFilePath,
-              fileType: ext,
-              success: () => {
-                uni.hideLoading()
-              },
-              fail: () => {
-                uni.hideLoading()
-                uni.showToast({ title: '暂不支持打开此类型文件', icon: 'none' })
-              }
-            })
-          },
-          fail: () => {
-            uni.hideLoading()
-            uni.showToast({ title: '文件下载失败', icon: 'none' })
           }
         })
       } else {
@@ -1796,14 +1852,73 @@ export default {
                 }
               })
             } else {
-              uni.setClipboardData({
-                data: url,
-                success: () => uni.showToast({ title: '链接已复制', icon: 'none' })
-              })
+              this.copyDownloadUrl(url)
             }
           }
         })
       }
+    },
+    downloadFileToTemp(url, title = '正在下载文件') {
+      uni.showLoading({ title })
+      return new Promise((resolve, reject) => {
+        uni.downloadFile({
+          url,
+          success: (res) => {
+            if (!res || res.statusCode !== 200 || !res.tempFilePath) {
+              reject(new Error('download failed'))
+              return
+            }
+            resolve(res.tempFilePath)
+          },
+          fail: reject,
+          complete: () => {
+            uni.hideLoading()
+          }
+        })
+      })
+    },
+    async openDownloadedDocument(url, fileName, path) {
+      try {
+        const tempFilePath = await this.downloadFileToTemp(url)
+        const ext = path.split('.').pop()
+        uni.openDocument({
+          filePath: tempFilePath,
+          fileType: ext,
+          showMenu: true,
+          fail: () => {
+            uni.showToast({ title: '暂不支持打开此类型文件', icon: 'none' })
+          }
+        })
+      } catch (error) {
+        uni.showToast({ title: '文件下载失败', icon: 'none' })
+      }
+    },
+    async saveDownloadedDocument(url, fileName) {
+      try {
+        const tempFilePath = await this.downloadFileToTemp(url)
+        uni.saveFile({
+          tempFilePath,
+          success: () => {
+            uni.showModal({
+              title: '已保存',
+              content: `文件已保存到小程序本地文件。若需要转发或另存，请点“打开预览”后使用右上角菜单。\n\n${fileName}`,
+              showCancel: false,
+              confirmText: '知道了'
+            })
+          },
+          fail: () => {
+            this.copyDownloadUrl(url, '保存失败，已复制下载链接')
+          }
+        })
+      } catch (error) {
+        this.copyDownloadUrl(url, '下载失败，已复制下载链接')
+      }
+    },
+    copyDownloadUrl(url, toastTitle = '下载链接已复制') {
+      uni.setClipboardData({
+        data: url,
+        success: () => uni.showToast({ title: toastTitle, icon: 'none' })
+      })
     },
     handleBack() {
       if (this.backUrl) {
@@ -1936,6 +2051,8 @@ export default {
 .nav-left {
   display: flex;
   align-items: center;
+  flex: 1;
+  min-width: 0;
 }
 
 .nav-back {
@@ -1960,24 +2077,32 @@ export default {
 .nav-title-group {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .nav-title {
   font-size: 32rpx;
   font-weight: 800;
   color: #1e2d6d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-subtitle {
   font-size: 18rpx;
   color: #6b7280;
   margin-top: 4rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-right {
   display: flex;
   align-items: center;
   gap: 20rpx;
+  flex-shrink: 0;
 }
 
 .nav-history-icon {
@@ -2379,6 +2504,89 @@ export default {
   margin-top: 8rpx;
 }
 
+.user-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  width: 100%;
+  margin-top: 14rpx;
+}
+
+.user-attachment-list:first-child {
+  margin-top: 0;
+}
+
+.user-attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 14rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1rpx solid rgba(59, 130, 246, 0.18);
+}
+
+.user-attachment-icon {
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 14rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #f8fafc;
+}
+
+.user-attachment-image {
+  width: 82rpx;
+  height: 82rpx;
+  border-radius: 14rpx;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.user-attachment-ext {
+  font-size: 18rpx;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.user-attachment-icon.icon-pdf { background: #fee2e2; color: #dc2626; }
+.user-attachment-icon.icon-word { background: #e0e7ff; color: #2563eb; }
+.user-attachment-icon.icon-excel { background: #dcfce7; color: #16a34a; }
+.user-attachment-icon.icon-ppt { background: #ffedd5; color: #ea580c; }
+.user-attachment-icon.icon-image { background: #fce7f3; color: #db2777; }
+.user-attachment-icon.icon-archive { background: #fef3c7; color: #b45309; }
+.user-attachment-icon.icon-text { background: #e0f2fe; color: #0284c7; }
+.user-attachment-icon.icon-file { background: #f1f5f9; color: #475569; }
+
+.user-attachment-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.user-attachment-name {
+  font-size: 24rpx;
+  line-height: 1.35;
+  font-weight: 800;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-attachment-meta {
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  line-height: 1.35;
+  color: #64748b;
+}
+
 .chat-image {
   width: 280rpx;
   border-radius: 16rpx;
@@ -2404,110 +2612,51 @@ export default {
   -webkit-user-select: text;
 }
 
-.process-panel {
-  margin-bottom: 18rpx;
-  padding: 16rpx 18rpx 12rpx;
-  border-radius: 18rpx;
-  background: #f8fafc;
-  border: 1rpx solid #dbe4f0;
+.agent-working {
+  display: inline-flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+  padding: 12rpx 18rpx;
+  border-radius: 999rpx;
+  background: #ecfdf5;
+  border: 1rpx solid #bbf7d0;
 }
 
-.process-head {
+.agent-spinner {
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  border: 4rpx solid rgba(34, 197, 94, 0.22);
+  border-top-color: #16a34a;
+  animation: agent-spin 0.8s linear infinite;
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  margin-bottom: 10rpx;
-}
-
-.process-dot {
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 50%;
-  background: #2563eb;
-  box-shadow: 0 0 0 8rpx rgba(37, 99, 235, 0.10);
-}
-
-.process-title {
-  flex: 1;
-  font-size: 24rpx;
-  font-weight: 800;
-  color: #1e3a8a;
-}
-
-.process-count {
-  flex-shrink: 0;
-  padding: 3rpx 10rpx;
-  border-radius: 999rpx;
-  background: #e0ecff;
-  color: #2563eb;
-  font-size: 20rpx;
-  font-weight: 800;
-  line-height: 1.4;
-}
-
-.process-item {
-  padding: 8rpx 0;
-  border-top: 1rpx solid #e5edf7;
-}
-
-.process-item:first-of-type {
-  border-top: none;
-}
-
-.process-item.expandable {
-  cursor: pointer;
-}
-
-.process-item.expandable:active {
-  background: #eef5ff;
-}
-
-.process-line {
-  display: flex;
-  align-items: flex-start;
-  gap: 12rpx;
-}
-
-.process-status {
-  width: 12rpx;
-  height: 12rpx;
-  border-radius: 50%;
-  background: #3b82f6;
-  margin-top: 14rpx;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.process-item.done .process-status {
-  background: #16a34a;
+.agent-spinner-core {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: #22c55e;
 }
 
-.process-item.error .process-status {
-  background: #dc2626;
-}
-
-.process-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.process-item-title {
-  display: block;
-  font-size: 24rpx;
-  line-height: 1.45;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.process-item-content {
-  display: block;
-  margin-top: 6rpx;
+.agent-working-text {
   font-size: 22rpx;
-  line-height: 1.6;
-  color: #475569;
-  white-space: pre-wrap;
-  word-break: break-word;
-  user-select: text;
-  -webkit-user-select: text;
+  line-height: 1.4;
+  font-weight: 800;
+  color: #15803d;
+}
+
+@keyframes agent-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .download-links {
