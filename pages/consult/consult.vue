@@ -36,8 +36,14 @@
       <view class="history-drawer">
         <view class="history-header">
           <text class="history-title">往期对话</text>
-          <view class="history-close" @click="closeSessionHistory">
-            <uni-icons type="closeempty" size="20" color="#64748b" />
+          <view class="history-header-actions">
+            <view class="history-new-inline" @click="startNewChat">
+              <uni-icons type="plusempty" size="16" color="#2563eb" />
+              <text>新对话</text>
+            </view>
+            <view class="history-close" @click="closeSessionHistory">
+              <uni-icons type="closeempty" size="20" color="#64748b" />
+            </view>
           </view>
         </view>
         
@@ -153,20 +159,29 @@
                 <text class="agent-working-text">{{ getAgentWorkStatus(msg) }}</text>
               </view>
               <rich-text v-if="msg.html" class="rich-content" :nodes="msg.html" user-select="true" />
-              <view v-if="msg.downloadLinks && msg.downloadLinks.length" class="download-links">
-              <view
-                v-for="(link, linkIdx) in msg.downloadLinks"
-                :key="link.url || linkIdx"
-                class="download-link"
-                @click.stop="downloadDocument(link)"
-              >
-                <view class="file-icon-box" :class="getFileTypeClass(link.url)">
-                  <text class="file-icon-text">{{ getFileTypeLabel(link.url) }}</text>
+              <view v-if="msg.downloadLinks && msg.downloadLinks.length" class="file-card-list assistant-files">
+                <view
+                  v-for="(link, linkIdx) in msg.downloadLinks"
+                  :key="link.url || linkIdx"
+                  class="file-card assistant-file"
+                  @click.stop="downloadDocument(link)"
+                >
+                  <image
+                    v-if="isImageFileUrl(link.url)"
+                    class="file-card-thumb"
+                    :src="link.url"
+                    mode="aspectFill"
+                  />
+                  <view v-else class="file-card-icon" :class="getFileTypeClass(link.url)">
+                    <text class="file-card-ext">{{ getFileTypeLabel(link.url) }}</text>
+                  </view>
+                  <view class="file-card-info">
+                    <text class="file-card-name">{{ getFileDisplayName(link) }}</text>
+                    <text class="file-card-meta">{{ getFileDisplayMeta(link, 'assistant') }}</text>
+                  </view>
+                  <uni-icons type="download" size="16" color="#64748b" />
                 </view>
-                <text class="download-link-text" selectable="true">{{ link.label }}</text>
-                <uni-icons type="download" size="14" color="#94a3b8" />
               </view>
-            </view>
               <view v-if="msg.expertCard" class="expert-card" @click.stop="openExpertCard(msg.expertCard)">
                 <view class="expert-card-icon">
                   <text class="expert-card-icon-text">专</text>
@@ -190,25 +205,27 @@
                 <text class="quote-text" selectable="true">「 {{ msg.quote.content }} 」</text>
               </view>
               <text v-if="getUserMessageText(msg)" class="msg-text" selectable="true">{{ getUserMessageText(msg) }}</text>
-              <view v-if="msg.attachments && msg.attachments.length" class="user-attachment-list">
+              <view v-if="msg.attachments && msg.attachments.length" class="file-card-list user-files">
                 <view
                   v-for="(file, fileIdx) in msg.attachments"
-                  :key="file.id || file.fileID || file.url || fileIdx"
-                  class="user-attachment-card"
+                  :key="file.id || getFileDisplayUrl(file) || fileIdx"
+                  class="file-card user-file"
+                  @click.stop="handleAttachmentTap(file)"
                 >
                   <image
-                    v-if="file.type === 'image' && getUserAttachmentUrl(file)"
-                    class="user-attachment-image"
-                    :src="getUserAttachmentUrl(file)"
+                    v-if="isImageAttachment(file) && getFileDisplayUrl(file)"
+                    class="file-card-thumb"
+                    :src="getFileDisplayUrl(file)"
                     mode="aspectFill"
                   />
-                  <view v-else class="user-attachment-icon" :class="getFileTypeClass(getUserAttachmentName(file))">
-                    <text class="user-attachment-ext">{{ getFileTypeLabel(getUserAttachmentName(file)) }}</text>
+                  <view v-else class="file-card-icon" :class="getFileTypeClass(getFileDisplayName(file))">
+                    <text class="file-card-ext">{{ getFileTypeLabel(getFileDisplayName(file)) }}</text>
                   </view>
-                  <view class="user-attachment-info">
-                    <text class="user-attachment-name">{{ getUserAttachmentName(file) }}</text>
-                    <text class="user-attachment-meta">{{ getUserAttachmentMeta(file) }}</text>
+                  <view class="file-card-info">
+                    <text class="file-card-name">{{ getFileDisplayName(file) }}</text>
+                    <text class="file-card-meta">{{ getFileDisplayMeta(file, 'user') }}</text>
                   </view>
+                  <uni-icons v-if="getFileDisplayUrl(file)" type="more-filled" size="16" color="#64748b" />
                 </view>
               </view>
             </view>
@@ -283,7 +300,7 @@
           <uni-icons type="link" size="20" color="#6b7280" />
         </view>
         <view class="quick-btn quick-clear" @click="clearLocalChat">
-          <uni-icons type="trash" size="20" color="#6b7280" />
+          <uni-icons type="plusempty" size="20" color="#6b7280" />
         </view>
         <view class="quick-btn quick-upload" @click="goUpload">
           <uni-icons type="paperclip" size="20" color="#FFFFFF" />
@@ -1282,16 +1299,41 @@ export default {
         .join('\n')
         .trim()
     },
-    getUserAttachmentName(file = {}) {
-      return file.name || file.title || file.fileName || file.file_name || '附件'
+    getFileDisplayName(file = {}) {
+      if (file.label) return file.label
+      return file.name || file.title || file.fileName || file.file_name || this.getFileNameFromUrl(this.getFileDisplayUrl(file)) || '附件'
     },
-    getUserAttachmentUrl(file = {}) {
-      return file.url || file.fileUrl || file.fileID || file.filePath || ''
+    getFileDisplayUrl(file = {}) {
+      return this.normalizeUrl(file.url || file.fileUrl || file.fileID || file.filePath || '')
     },
-    getUserAttachmentMeta(file = {}) {
-      if (file.type === 'image') return '图片附件'
-      if (file.type === 'audio') return '语音附件'
-      return `${this.getFileTypeLabel(this.getUserAttachmentName(file))} 文件`
+    getFileDisplayMeta(file = {}, source = 'user') {
+      if (file.type === 'image' || this.isImageFileUrl(this.getFileDisplayUrl(file)) || this.isImageFileUrl(this.getFileDisplayName(file))) {
+        return source === 'assistant' ? '图片文件，可预览或复制链接' : '图片附件，已随消息发送'
+      }
+      if (file.type === 'audio') return '语音附件，已随消息发送'
+
+      const label = this.getFileTypeLabel(this.getFileDisplayName(file))
+      if (source === 'assistant') return `${label} 文件，点击处理`
+      return `${label} 文件，已随消息发送`
+    },
+    isImageFileUrl(url) {
+      const path = String(url || '').split('?')[0].split('#')[0].toLowerCase()
+      return /\.(png|jpg|jpeg|gif|bmp|webp)$/i.test(path)
+    },
+    isImageAttachment(file = {}) {
+      return file.type === 'image' || this.isImageFileUrl(this.getFileDisplayUrl(file)) || this.isImageFileUrl(this.getFileDisplayName(file))
+    },
+    handleAttachmentTap(file = {}) {
+      const url = this.getFileDisplayUrl(file)
+      if (!url) {
+        uni.showToast({ title: '附件已随消息发送', icon: 'none' })
+        return
+      }
+
+      this.downloadDocument({
+        url,
+        label: this.getFileDisplayName(file)
+      })
     },
     getFileExt(fileName) {
       const match = String(fileName || '').match(/\.([^.?#/]+)$/)
@@ -1786,13 +1828,13 @@ export default {
       this.clearTimers()
       this.inputText = ''
       this.scrollTop = 0
-      this.messages = []
+      this.messages = [this.getWelcomeMessage()]
       this.pendingAttachments = []
       this.sessionId = ''
       this.initialized = false
       uni.removeStorageSync(this.storageSessionKey)
       uni.setStorageSync(this.clearedSessionKey, 1)
-      uni.showToast({ title: '聊天记录已清空', icon: 'none' })
+      uni.showToast({ title: '新会话已开启', icon: 'none' })
     },
     goUpload() {
       uni.navigateTo({ url: `/pages/consult/upload?target=${encodeURIComponent(this.uploadTargetId)}` })
@@ -1825,8 +1867,24 @@ export default {
       
       // 判断是否为支持直接打开的文件类型
       const isFile = this.isWordFileUrl(url) || path.endsWith('.pdf') || path.endsWith('.ppt') || path.endsWith('.pptx')
+      const isImage = this.isImageFileUrl(url)
 
-      if (isFile) {
+      if (isImage) {
+        uni.showActionSheet({
+          itemList: ['预览图片', '复制图片链接'],
+          success: (e) => {
+            if (e.tapIndex === 0) {
+              uni.previewImage({
+                urls: [url],
+                current: url,
+                fail: () => this.copyDownloadUrl(url, '预览失败，已复制链接')
+              })
+            } else if (e.tapIndex === 1) {
+              this.copyDownloadUrl(url, '图片链接已复制')
+            }
+          }
+        })
+      } else if (isFile) {
         uni.showActionSheet({
           itemList: ['打开预览', '保存到小程序本地', '复制下载链接'],
           success: (e) => {
@@ -2176,6 +2234,27 @@ export default {
   color: #0f172a;
 }
 
+.history-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  flex-shrink: 0;
+}
+
+.history-new-inline {
+  height: 56rpx;
+  padding: 0 18rpx;
+  border-radius: 16rpx;
+  background: #eff6ff;
+  border: 1rpx solid #bfdbfe;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  color: #2563eb;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
 .history-list {
   flex: 1;
 }
@@ -2504,7 +2583,7 @@ export default {
   margin-top: 8rpx;
 }
 
-.user-attachment-list {
+.file-card-list {
   display: flex;
   flex-direction: column;
   gap: 12rpx;
@@ -2512,11 +2591,15 @@ export default {
   margin-top: 14rpx;
 }
 
-.user-attachment-list:first-child {
+.assistant-files {
+  margin-top: 20rpx;
+}
+
+.file-card-list:first-child {
   margin-top: 0;
 }
 
-.user-attachment-card {
+.file-card {
   display: flex;
   align-items: center;
   gap: 14rpx;
@@ -2527,9 +2610,20 @@ export default {
   border-radius: 16rpx;
   background: rgba(255, 255, 255, 0.62);
   border: 1rpx solid rgba(59, 130, 246, 0.18);
+  transition: all 0.2s;
 }
 
-.user-attachment-icon {
+.assistant-file {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.file-card:active {
+  background: #f1f5f9;
+  transform: scale(0.98);
+}
+
+.file-card-icon {
   width: 68rpx;
   height: 68rpx;
   border-radius: 14rpx;
@@ -2540,7 +2634,7 @@ export default {
   background: #f8fafc;
 }
 
-.user-attachment-image {
+.file-card-thumb {
   width: 82rpx;
   height: 82rpx;
   border-radius: 14rpx;
@@ -2548,29 +2642,29 @@ export default {
   flex-shrink: 0;
 }
 
-.user-attachment-ext {
+.file-card-ext {
   font-size: 18rpx;
   line-height: 1;
   font-weight: 900;
 }
 
-.user-attachment-icon.icon-pdf { background: #fee2e2; color: #dc2626; }
-.user-attachment-icon.icon-word { background: #e0e7ff; color: #2563eb; }
-.user-attachment-icon.icon-excel { background: #dcfce7; color: #16a34a; }
-.user-attachment-icon.icon-ppt { background: #ffedd5; color: #ea580c; }
-.user-attachment-icon.icon-image { background: #fce7f3; color: #db2777; }
-.user-attachment-icon.icon-archive { background: #fef3c7; color: #b45309; }
-.user-attachment-icon.icon-text { background: #e0f2fe; color: #0284c7; }
-.user-attachment-icon.icon-file { background: #f1f5f9; color: #475569; }
+.file-card-icon.icon-pdf { background: #fee2e2; color: #dc2626; }
+.file-card-icon.icon-word { background: #e0e7ff; color: #2563eb; }
+.file-card-icon.icon-excel { background: #dcfce7; color: #16a34a; }
+.file-card-icon.icon-ppt { background: #ffedd5; color: #ea580c; }
+.file-card-icon.icon-image { background: #fce7f3; color: #db2777; }
+.file-card-icon.icon-archive { background: #fef3c7; color: #b45309; }
+.file-card-icon.icon-text { background: #e0f2fe; color: #0284c7; }
+.file-card-icon.icon-file { background: #f1f5f9; color: #475569; }
 
-.user-attachment-info {
+.file-card-info {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
 }
 
-.user-attachment-name {
+.file-card-name {
   font-size: 24rpx;
   line-height: 1.35;
   font-weight: 800;
@@ -2580,7 +2674,7 @@ export default {
   white-space: nowrap;
 }
 
-.user-attachment-meta {
+.file-card-meta {
   margin-top: 4rpx;
   font-size: 20rpx;
   line-height: 1.35;
@@ -2657,60 +2751,6 @@ export default {
   to {
     transform: rotate(360deg);
   }
-}
-
-.download-links {
-  margin-top: 20rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-}
-
-.download-link {
-  display: flex;
-  align-items: center;
-  padding: 16rpx 20rpx;
-  background: #f8fafc;
-  border: 1rpx solid #e2e8f0;
-  border-radius: 16rpx;
-  gap: 20rpx;
-  transition: all 0.2s;
-  
-  &:active {
-    background: #f1f5f9;
-    transform: scale(0.98);
-  }
-}
-
-.file-icon-box {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 12rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  
-  &.icon-pdf { background: #fee2e2; .file-icon-text { color: #dc2626; } }
-  &.icon-word { background: #e0e7ff; .file-icon-text { color: #2563eb; } }
-  &.icon-excel { background: #dcfce7; .file-icon-text { color: #16a34a; } }
-  &.icon-ppt { background: #ffedd5; .file-icon-text { color: #ea580c; } }
-  &.icon-image { background: #fce7f3; .file-icon-text { color: #db2777; } }
-  &.icon-archive { background: #fef3c7; .file-icon-text { color: #b45309; } }
-  &.icon-text { background: #e0f2fe; .file-icon-text { color: #0284c7; } }
-  &.icon-file { background: #f1f5f9; .file-icon-text { color: #475569; } }
-}
-
-.file-icon-text {
-  font-size: 20rpx;
-  font-weight: 800;
-}
-
-.download-link-text {
-  flex: 1;
-  color: #334155;
-  font-size: 26rpx;
-  font-weight: 500;
 }
 
 .msg-op-bar {
